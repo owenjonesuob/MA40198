@@ -190,7 +190,7 @@ data.frame(par = names(llog_opt$par),
 
 
 
-
+rats$litter <- factor(rats$litter)
 
 
 X <- model.matrix(~ 1 + rx, data = rats)
@@ -221,13 +221,15 @@ weib_me_surv <- deriv(
 
 
 
-lfyb <- function(theta, y, b, X, Z) {
+lfyb <- function(theta, t, b, X, Z) {
 
   beta <- theta[1:2]
   log_sigma <- theta[3]
   log_sigma_b <- theta[4]
 
   eta <- X%*%beta + Z%*%b
+
+  status <- X[, 2]
 
   # Log conditional density of y given b
   lfy_b <- sum(
@@ -243,18 +245,21 @@ lfyb <- function(theta, y, b, X, Z) {
 
   # Now gradient and Hessian
   g <- colSums(rbind(
-    status * attr(weib_me_prob(t, eta, log_sigma, treated), "gradient"),
-    (1-status) * attr(weib_me_surv(t, eta, log_sigma, treated), "gradient")
-  ))
-
-  H <- colSums(rbind(
-    status * attr(weib_me_prob(t, eta, log_sigma, treated), "hessian"),
-    (1-status) * attr(weib_me_surv(t, eta, log_sigma, treated), "hessian")
+    status * attr(weib_me_prob(t, b, eta, log_sigma), "gradient"),
+    (1-status) * attr(weib_me_surv(t, b, eta, log_sigma), "gradient")
   ))
 
 
+
+  H <- apply((
+    status * attr(weib_me_prob(t, b, eta, log_sigma), "hessian") +
+    (1-status) * attr(weib_me_surv(t, b, eta, log_sigma), "hessian")
+  ), c(2, 3), sum)
+
+  list(lf = lf, g = g, H = H)
 
 }
+
 
 
 
