@@ -57,6 +57,50 @@ q_ll$par[2] - 1.96*sqrt(inv_hess_ll[2,2])
 
 
 #4.
+rats$litter <- factor(rats$litter)
+Z <- model.matrix(~ litter - 1,rats)
+
+X <- model.matrix(~ rx, rats)
 
 
-=
+lfyb <- function(theta, y, b, X, Z){
+  eta_0 = as.numeric(theta[1] + Z%*%b)
+  eta_1 = as.numeric(X%*%theta[1:2] + Z%*%b)
+  scale_0 = exp(eta_0)
+  scale_1 = exp(eta_1)
+  shape = 1/exp(theta[3])
+  
+  shape = 1/exp(theta[3])
+
+  l1 = dweibull(y[rats$status==1&rats$rx==1], shape=shape, scale=scale_1, log=TRUE) 
+  l2 = dweibull(y[rats$status==1&rats$rx==0], shape=shape, scale=scale_0, log=TRUE) 
+  
+  l3 = pweibull(y[rats$status==0&rats$rx==1], shape=shape, scale=scale_1, log.p=TRUE, lower.tail=FALSE) 
+  l4 = pweibull(y[rats$status==0&rats$rx==0], shape=shape, scale=scale_0, log.p=TRUE, lower.tail=FALSE)   
+  
+  lfy_b = sum(l1)+sum(l2)+sum(l3)+sum(l4)
+  lfb = sum(dnorm(b, 0, exp(theta[4]), log=TRUE))
+  -lfy_b - lfb
+  
+  
+}
+
+lal <- function(theta, y, X, Z){
+  
+  b <- rep(0,ncol(Z))
+  opt = optim(par=b, lfyb, theta=theta, y=y, X=X, Z=Z, method="BFGS", hessian=TRUE)
+  
+  
+  la <- -lfyb(theta, y, opt$par, X, Z) + length(b)*log(2*pi)/2 - sum(log(abs(diag(solve(opt$hessian)))))/2
+  
+  attr(la,"b") <- as.numeric(b)
+  
+  -la
+  
+}
+
+theta0=c(1.1749184,  0.6614587, -1.4266831,  1.7078852)
+
+optim(par=theta0, lal, X=X, y=rats$time, Z=Z, method="BFGS", hessian=TRUE)
+
+#works w/ nelder mead
