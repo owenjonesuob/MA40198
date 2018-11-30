@@ -1,0 +1,3 @@
+## MA40198 - Applied Statistical Inference
+
+Optimisation, random effects, MCMC and so on and so forth...
