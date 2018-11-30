@@ -190,3 +190,71 @@ data.frame(par = names(llog_opt$par),
 
 
 
+
+
+
+X <- model.matrix(~ 1 + rx, data = rats)
+Z <- model.matrix(~ litter - 1, data = rats)
+
+
+
+
+weib_me_prob <- deriv(
+  expression(
+    log((1/exp(log_sigma))/exp(eta) * (t/exp(eta))^((1/exp(log_sigma))-1) * exp(-(t/exp(eta))^(1/exp(log_sigma))))
+  ),
+  namevec = c("eta", "log_sigma"),
+  function.arg = c("t", "b", "eta", "log_sigma"),
+  hessian = TRUE
+)
+
+
+weib_me_surv <- deriv(
+  expression(
+    -(t/exp(eta))^(1/exp(log_sigma))
+  ),
+  namevec = c("eta", "log_sigma"),
+  function.arg = c("t", "b", "eta", "log_sigma"),
+  hessian = TRUE
+)
+
+
+
+
+lfyb <- function(theta, y, b, X, Z) {
+
+  beta <- theta[1:2]
+  log_sigma <- theta[3]
+  log_sigma_b <- theta[4]
+
+  eta <- X%*%beta + Z%*%b
+
+  # Log conditional density of y given b
+  lfy_b <- sum(
+    status * weib_me_prob(t, b, eta, log_sigma),
+    (1-status) * weib_me_surv(t, b, eta, log_sigma)
+  )
+
+  # Log marginal density of b
+  lfb <- sum(dnorm(x = b, mean = 0, sd = exp(log_sigma_b), log = TRUE))
+
+  # Log joint density of y and b is the sum (joint density is product - y, b are independent)
+  lf <- lfy_b + lfb
+
+  # Now gradient and Hessian
+  g <- colSums(rbind(
+    status * attr(weib_me_prob(t, eta, log_sigma, treated), "gradient"),
+    (1-status) * attr(weib_me_surv(t, eta, log_sigma, treated), "gradient")
+  ))
+
+  H <- colSums(rbind(
+    status * attr(weib_me_prob(t, eta, log_sigma, treated), "hessian"),
+    (1-status) * attr(weib_me_surv(t, eta, log_sigma, treated), "hessian")
+  ))
+
+
+
+}
+
+
+
