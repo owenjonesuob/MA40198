@@ -201,10 +201,12 @@ Z <- model.matrix(~ litter - 1, data = rats)
 
 weib_me_prob <- deriv(
   expression(
-    log((1/exp(log_sigma))/exp(eta) * (t/exp(eta))^((1/exp(log_sigma))-1) * exp(-(t/exp(eta))^(1/exp(log_sigma))))
+    log((1/exp(log_sigma))/exp(eta) *
+          (t/exp(eta))^((1/exp(log_sigma))-1) *
+          exp(-(t/exp(eta))^(1/exp(log_sigma))))
   ),
-  namevec = c("eta", "log_sigma"),
-  function.arg = c("t", "b", "eta", "log_sigma"),
+  namevec = "eta",
+  function.arg = c("t", "eta", "log_sigma"),
   hessian = TRUE
 )
 
@@ -213,15 +215,15 @@ weib_me_surv <- deriv(
   expression(
     -(t/exp(eta))^(1/exp(log_sigma))
   ),
-  namevec = c("eta", "log_sigma"),
-  function.arg = c("t", "b", "eta", "log_sigma"),
+  namevec = "eta",
+  function.arg = c("t", "eta", "log_sigma"),
   hessian = TRUE
 )
 
 
 
 
-lfyb <- function(theta, t, b, X, Z) {
+lfyb <- function(theta, y, b, X, Z) {
 
   beta <- theta[1:2]
   log_sigma <- theta[3]
@@ -233,8 +235,8 @@ lfyb <- function(theta, t, b, X, Z) {
 
   # Log conditional density of y given b
   lfy_b <- sum(
-    status * weib_me_prob(t, b, eta, log_sigma),
-    (1-status) * weib_me_surv(t, b, eta, log_sigma)
+    status * weib_me_prob(y, eta, log_sigma),
+    (1-status) * weib_me_surv(y, eta, log_sigma)
   )
 
   # Log marginal density of b
@@ -243,22 +245,77 @@ lfyb <- function(theta, t, b, X, Z) {
   # Log joint density of y and b is the sum (joint density is product - y, b are independent)
   lf <- lfy_b + lfb
 
-  # Now gradient and Hessian
-  g <- colSums(rbind(
-    status * attr(weib_me_prob(t, b, eta, log_sigma), "gradient"),
-    (1-status) * attr(weib_me_surv(t, b, eta, log_sigma), "gradient")
-  ))
 
+  # Gradient of log-likelihood with respect to b
+  # 2 terms: d(lfy_b)/db + d(lfb)/db
+  g <- t(Z) %*% (status*attr(weib_me_prob(y, eta, log_sigma), "gradient") + (1-status)*attr(weib_me_surv(y, eta, log_sigma), "gradient")) - b/(exp(log_sigma_b)^2)
 
+  # Hessian of log-likelihood wrt b i.e. dl/(db db^T)) will be diagonal since
+  # taking derivative wrt bi then wrt bj where j!=i gives us 0
+  # i.e. we can use "hessian" from weib_me_*()
+  # So H_diag is the diagonal entries from the Hessian matrix (and all other entries are 0)
+  H_diag <- t(Z) %*% (status*attr(weib_me_prob(y, eta, log_sigma), "hessian") + (1-status)*attr(weib_me_surv(y, eta, log_sigma), "hessian")) - 1/(exp(log_sigma_b)^2)
 
-  H <- apply((
-    status * attr(weib_me_prob(t, b, eta, log_sigma), "hessian") +
-    (1-status) * attr(weib_me_surv(t, b, eta, log_sigma), "hessian")
-  ), c(2, 3), sum)
-
-  list(lf = lf, g = g, H = H)
+  list(lf = lf, g = g, H_diag = H_diag)
 
 }
+
+
+
+
+lfyb(rep(1, 4), rats$time, rep(0, ncol(Z)), X, Z)
+
+
+
+
+
+lal <- function(theta, y, X, Z) {
+
+  beta <- theta[1:2]
+  log_sigma <- theta[3]
+  log_sigma_b <- theta[4]
+
+
+  # Starting guess for b
+  b_init <- rep(0, ncol(Z))
+
+
+  opt <- optim(
+    b_init,
+    fn = function(b) {
+      tmp <- lfyb(theta, y, b, X, Z)
+      tmp$lf
+    },
+    gr = function(b) {
+      tmp <- lfyb(theta, y, b, X, Z)
+      tmp$g
+    },
+    method = "BFGS",
+
+    # Set `fnscale = -1` so that we MINIMISE the NEGATIVE log-likelihood
+    control = list(fnscale = -1)
+  )
+
+
+  b_opt <- opt$par
+
+  soln_opt <- lfyb(theta, y, b_opt, X, Z)
+
+  # Hessian was diagonal, so det(-H) is product of diagonal elements
+  # i.e. log(det(-H)) is sum of logs of diagonal elements
+  log_det_H <- sum(log(-soln_opt$H_diag))
+
+
+  # Return log-Laplacian approximation
+  lap <- -((length(b_opt)/2)*log(2*pi) + soln_opt$lf - log_det_H/2)
+  attr(lap, "b") <- b_opt
+
+  lap
+}
+
+
+
+lal(rep(1, 4), rats$time, X, Z)
 
 
 
