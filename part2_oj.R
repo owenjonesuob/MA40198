@@ -95,3 +95,23 @@ round(data.frame(
 
 # Recover gamma
 min(fatigue$s) / (1 + exp(-N_opt$par[4]))
+
+
+
+
+
+
+alpha <- exp(N_opt$par[1])
+delta <- N_opt$par[2]
+sigma <- exp(N_opt$par[3])
+gamma <- min(fatigue$s) / (1 + exp(-N_opt$par[4]))
+
+
+library(ggplot2)
+
+ggplot(fatigue, aes(x = s)) +
+  geom_point(aes(y = N)) +
+  stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.1, shape = 1, scale = 1)}, aes(color = "10% quantile")) +
+  stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.5, shape = 1, scale = 1)}, aes(color = "50% quantile"), linetype = "dashed") +
+  ggtitle("Estimated quantiles of fatigue") + labs(x = "Stress", y = "N", color = "Estimated quantiles") +
+  theme_bw() + theme(legend.position = c(0.8, 0.85), legend.background = element_rect(color = "black"))
