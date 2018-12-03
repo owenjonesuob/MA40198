@@ -2,6 +2,10 @@
 # Import data
 rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
 
+# Try to see whether there's any immediately obvious effect from treatment
+library(ggplot2)
+ggplot(rats, aes(group = factor(rx), fill = factor(rx), x = time)) + geom_density(alpha = 0.3)
+ggplot(rats, aes(x = factor(rx), y = time, fill = factor(rx))) + geom_violin()
 
 
 # Negative log-likelihood using values from built-in Weibull functions
