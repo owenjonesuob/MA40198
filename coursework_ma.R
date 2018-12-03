@@ -399,11 +399,11 @@ nll_s2_2 <- function(theta){
   sigma = exp(theta[3])
   alpha = exp(theta[1])
   delta = theta[2]
-  not_censored = sum(dweibull(fatigue$N[fatigue$ro==0], scale = (alpha*(fatigue$s[fatigue$ro==0] - gamma)^delta), shape=(1/sigma), log=TRUE))
-  censored = sum(pweibull(fatigue$N[fatigue$ro==1], scale = (alpha*(fatigue$s[fatigue$ro==1] - gamma)^delta), shape=(1/sigma), log.p=TRUE, lower.tail=FALSE))
+  not_censored = sum(dweibull(fatigue$N[fatigue$ro==0], scale = (alpha*(fatigue$s[fatigue$ro==0] - gamma_try)^delta), shape=(1/sigma), log=TRUE))
+  censored = sum(pweibull(fatigue$N[fatigue$ro==1], scale = (alpha*(fatigue$s[fatigue$ro==1] - gamma_try)^delta), shape=(1/sigma), log.p=TRUE, lower.tail=FALSE))
   -not_censored-censored
   
 }
 
 theta0 = c(10,10,10,10)
-optim(theta0, nll_s2_2,control=list(trace=1, REPORT=1) )#method="BFGS", hessian=TRUE)
+optim(theta0, nll_s2_2,control=list(trace=1, REPORT=1),method="BFGS", hessian=TRUE)
