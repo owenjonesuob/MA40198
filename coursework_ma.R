@@ -180,7 +180,7 @@ weib_re_surv <- deriv(
 
 
 
-posterior <- function(theta, y, b, X, Z) {
+log_posterior <- function(theta, y, b, X, Z) {
 
   beta <- theta[1:2]
   log_sigma <- theta[3]
@@ -203,16 +203,16 @@ posterior <- function(theta, y, b, X, Z) {
   # Log joint density of y and b is the sum (joint density is product - y, b are independent)
   lf <- lfy_b + lfb
 
-  # Define prior (sum of priors for all parameters - here, just for log_sigma_b)
-  prior <- dexp(exp(log_sigma_b), rate = 5, log = TRUE)
+  # Define log-prior (sum of log-priors for all parameters - here, just for log_sigma_b)
+  log_prior <- dexp(exp(log_sigma_b), rate = 5, log = TRUE)
 
-  # (Log) posterior is (log) prior plus (log) likelihood
-  lf + prior
+  # Log-posterior is log-prior plus log-likelihood
+  lf + log_prior
 
 }
 
 
-posterior(c(1, 1, 1, 1), rats$time, rep(0.1, ncol(Z)), X, Z)
+log_posterior(c(1, 1, 1, 1), rats$time, rep(0.1, ncol(Z)), X, Z)
 
 
 #QQQ ISSUE AT THE MOMENT - NAN'S ARE PRODUCED........
@@ -239,11 +239,11 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
     b_prop <- rnorm(ncol(Z), mean = 0, sd = exp(theta_prop[4]))
 
 
-    post_curr <- posterior(theta_curr, y, b_curr, X, Z)
-    post_prop <- posterior(theta_prop, y, b_prop, X, Z)
+    log_post_curr <- log_posterior(theta_curr, y, b_curr, X, Z)
+    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
 
 
-    accept_prob <- exp(post_prop - post_curr)
+    accept_prob <- exp(log_post_prop - log_post_curr)
 
     if (accept_prob > runif(1)) {
 
@@ -266,6 +266,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
     apply(theta_vals, 2, function(x) {
       plot(x, type = "l")
       abline(v = burnin, col = "red")
+      rect(0, min(x), burnin, min(y), density = 10, col = "red")
     })
     par(mfrow = c(1, 1))
   }
@@ -279,7 +280,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
 
 
 
-zz <- mcmc_mh(5000, 3000, rep(1, 4), c(0.5, 0.5, 0.5, 0.1), rats$time, X, Z)
+zz <- mcmc_mh(3000, 500, rep(1, 4), c(0.2, 0.1, 0.1, 0.1), rats$time, X, Z)
 
 
 
