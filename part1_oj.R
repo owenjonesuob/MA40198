@@ -209,14 +209,13 @@ Z <- model.matrix(~ litter - 1, data = rats)
 # Expressions for model including random effects
 weib_re_prob <- deriv(
   expression(
-    log((1/exp(log_sigma))/exp(eta) *
-          (t/exp(eta))^((1/exp(log_sigma))-1) *
-          exp(-(t/exp(eta))^(1/exp(log_sigma))))
+    -log_sigma - eta + (1/exp(log_sigma) - 1)*(log(t) - eta) - (t/exp(eta))^(1/exp(log_sigma))
   ),
   namevec = "eta",
   function.arg = c("t", "eta", "log_sigma"),
   hessian = TRUE
 )
+
 
 weib_re_surv <- deriv(
   expression(
