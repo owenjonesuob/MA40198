@@ -1,153 +1,5 @@
 rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
 
-nll <- function(theta){
-
-  l1 = dweibull(rats$time[rats$status==1&rats$rx==1], shape=1/exp(theta[3]), scale=exp(theta[1] + theta[2]), log=TRUE)
-  l2 = dweibull(rats$time[rats$status==1&rats$rx==0], shape=1/exp(theta[3]), scale=exp(theta[1]), log=TRUE)
-
-  l3 = pweibull(rats$time[rats$status==0&rats$rx==1], shape=1/exp(theta[3]), scale=exp(theta[1] + theta[2]), log.p=TRUE, lower.tail=FALSE)
-  l4 = pweibull(rats$time[rats$status==0&rats$rx==0], shape=1/exp(theta[3]), scale=exp(theta[1]), log.p=TRUE, lower.tail=FALSE)
-
-  -(sum(l1)+sum(l2)+sum(l3)+sum(l4))
-
-}
-
-
-theta0=c(1,1,1)
-
-q=optim(par=theta0,fn=nll, method="BFGS", hessian=TRUE)
-inv_hess = solve(q$hessian)
-
-#2.
-q$par[2] + 1.96*sqrt(inv_hess[2,2])
-q$par[2] - 1.96*sqrt(inv_hess[2,2])
-
-#Interpretation: This shows that at the 5% significance level, beta1 is significantly different from 0 and therefore
-#we can say that there is sufficient evidence to suggest that recieving treatment has an effect on the time it takes
-#for a tumour to appear. We have a negative estimate, which decreases the scale parameter in the Weibull distribution.
-#This in turn DECREASES/INCREASES the esimated times for tumour appearance.
-
-#3.
-
-install.packages("actuar")
-library(actuar)
-
-nll_ll <- function(theta){
-
-  shape = 1/exp(theta[3])
-  scale_0 = exp(theta[1])
-  scale_1 = exp(theta[1]+theta[2])
-
-  l1 = log(shape)-log(scale_1)+(shape-1)*log(rats$time[rats$status==1&rats$rx==1]/scale_1) - 2*log(1+(rats$time[rats$status==1&rats$rx==1]/scale_1)^shape)
-  l2 = log(shape)-log(scale_0)+(shape-1)*log(rats$time[rats$status==1&rats$rx==0]/scale_0) - 2*log(1+(rats$time[rats$status==1&rats$rx==0]/scale_0)^shape)
-
-  l3 = -log(1+(rats$time[rats$status==0&rats$rx==1]/scale_1)^shape)
-  l4 = -log(1+(rats$time[rats$status==0&rats$rx==0]/scale_0)^shape)
-
-  -(sum(l1)+sum(l2)+sum(l3)+sum(l4))
-
-}
-
-
-theta0_ll=c(1,1,1)
-q_ll=optim(par=theta0_ll,fn=nll_ll, method="BFGS", hessian=TRUE)
-inv_hess_ll = solve(q_ll$hessian)
-q_ll$par[2] + 1.96*sqrt(inv_hess_ll[2,2])
-q_ll$par[2] - 1.96*sqrt(inv_hess_ll[2,2])
-
-
-#4.
-rats$litter <- factor(rats$litter)
-Z <- model.matrix(~ litter - 1,rats)
-
-X <- model.matrix(~ rx, rats)
-
-
-lfyb <- function(theta, y, b, X, Z){
-  eta_0 = as.numeric(theta[1] + Z%*%b)
-  eta_1 = as.numeric(X%*%theta[1:2] + Z%*%b)
-  scale_0 = exp(eta_0)
-  scale_1 = exp(eta_1)
-  shape = 1/exp(theta[3])
-
-  shape = 1/exp(theta[3])
-
-  l1 = dweibull(y[rats$status==1&rats$rx==1], shape=shape, scale=scale_1, log=TRUE)
-  l2 = dweibull(y[rats$status==1&rats$rx==0], shape=shape, scale=scale_0, log=TRUE)
-
-  l3 = pweibull(y[rats$status==0&rats$rx==1], shape=shape, scale=scale_1, log.p=TRUE, lower.tail=FALSE)
-  l4 = pweibull(y[rats$status==0&rats$rx==0], shape=shape, scale=scale_0, log.p=TRUE, lower.tail=FALSE)
-
-  lfy_b = sum(l1)+sum(l2)+sum(l3)+sum(l4)
-  lfb = sum(dnorm(b, 0, exp(theta[4]), log=TRUE))
-  -lfy_b - lfb
-
-
-}
-
-lal <- function(theta, y, X, Z){
-
-  b <- rep(0,ncol(Z))
-  opt = optim(par=b, lfyb, theta=theta, y=y, X=X, Z=Z, method="BFGS", hessian=TRUE)
-
-
-  la <- -lfyb(theta, y, opt$par, X, Z) + length(b)*log(2*pi)/2 - sum(log(abs(diag(solve(opt$hessian)))))/2
-
-  attr(la,"b") <- as.numeric(b)
-
-  -la
-
-}
-
-theta0=c(1.1749184,  0.6614587, -1.4266831,  1.7078852)
-
-optim(par=theta0, lal, X=X, y=rats$time, Z=Z, method="BFGS", hessian=TRUE)
-
-#works w/ nelder mead
-
-
-
-#5
-
-#Posterior proportional to prior x likelihood.
-#Doing log posterior for ease of calculations
-posterior <- function(theta, y, b, X, Z){
-  eta_0_0 = as.numeric(theta[1] + Z%*%b)[rats$status==0&rats$rx==0]
-  # treatment==1 means include beta1 in eta
-  # rx==1 means use survival function rather than pdf
-  eta_1_0 = as.numeric(X%*%theta[1:2] + Z%*%b)[rats$status==0&rats$rx==1]
-
-  eta_0_1 = as.numeric(theta[1] + Z%*%b)[rats$status==1&rats$rx==0]
-  eta_1_1 = as.numeric(X%*%theta[1:2] + Z%*%b)[rats$status==1&rats$rx==1]
-
-  scale_0_0 = exp(eta_0_0)
-  scale_0_1 = exp(eta_0_1)
-
-  scale_1_0 = exp(eta_1_0)
-  scale_1_1 = exp(eta_1_1)
-
-  shape = 1/exp(theta[3])
-
-
-  l1 = dweibull(y[rats$status==1&rats$rx==1], shape=shape, scale=scale_1_1, log=TRUE)
-  l2 = dweibull(y[rats$status==0&rats$rx==1], shape=shape, scale=scale_1_0, log=TRUE)
-
-  l3 = pweibull(y[rats$status==1&rats$rx==0], shape=shape, scale=scale_0_1, log.p=TRUE, lower.tail=FALSE)
-  l4 = pweibull(y[rats$status==0&rats$rx==0], shape=shape, scale=scale_0_0, log.p=TRUE, lower.tail=FALSE)
-
-  lfy_b = sum(l1)+sum(l2)+sum(l3)+sum(l4)
-  lfb = sum(dnorm(b, 0, exp(theta[4]), log=TRUE))
-  likelihood = lfy_b + lfb
-  sigma_prior = dexp(exp(theta[4]), rate=5, log=TRUE)
-
-  likelihood + sigma_prior
-  #No other priors are needed here as they are all assumed to be improper uniform, i.e. proportional to 1
-
-}
-
-
-#OWEN'S WORK:
-#
 
 rats$litter <- factor(rats$litter)
 
@@ -192,10 +44,10 @@ log_posterior <- function(theta, y, b, X, Z) {
 
   # Log conditional density of y given b
   # Sometimes we sum lots of -Infs and get NaN... prevent this
-  lfy_b <- max(sum(
+  lfy_b <- sum(
     status * weib_re_prob(y, eta, log_sigma),
     (1-status) * weib_re_surv(y, eta, log_sigma)
-  ), -Inf, na.rm = TRUE)
+  )
 
   # Log marginal density of b
   lfb <- sum(dnorm(x = b, mean = 0, sd = exp(log_sigma_b), log = TRUE))
@@ -215,8 +67,6 @@ log_posterior <- function(theta, y, b, X, Z) {
 log_posterior(c(1, 1, 1, 1), rats$time, rep(0.1, ncol(Z)), X, Z)
 
 
-#QQQ ISSUE AT THE MOMENT - NAN'S ARE PRODUCED........
-
 
 
 
@@ -225,39 +75,65 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   theta_vals <- matrix(NA, nrow = iters+1, ncol = 4)
   theta_vals[1, ] <- init_params
 
-  acceptance <- rep(NA, iters)
+  b <- rep(0, ncol(Z))
 
+  acceptance <- rep(NA, iters)
+  acceptance_b <- rep(NA, iters)
+
+  log_post <- log_posterior(init_params, y, b, X, Z)
+
+  # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
 
+
+  # MCMC loop
   for (k in seq_len(iters)) {
 
-    theta_curr <- theta_vals[k, ]
-    theta_prop <- rnorm(4, mean = theta_curr, sd = tuners)
 
-    # Random effects have standard deviation exp(log_sigma_b)
-    b_curr <- rnorm(ncol(Z), mean = 0, sd = exp(theta_curr[4]))
-    b_prop <- rnorm(ncol(Z), mean = 0, sd = exp(theta_prop[4]))
+    # "Non-random" parameters: we're ignoring log_sigma_b for now
+    theta_prop <- rnorm(4, mean = theta_vals[k, ], sd = tuners)
 
+    log_post_prop <- log_posterior(theta_prop, y, b, X, Z)
 
-    log_post_curr <- log_posterior(theta_curr, y, b_curr, X, Z)
-    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
-
-
-    accept_prob <- exp(log_post_prop - log_post_curr)
+    accept_prob <- min(exp(log_post_prop - log_post), Inf, na.rm = TRUE)
 
     if (accept_prob > runif(1)) {
 
       theta_vals[k+1, ] <- theta_prop
-      acceptance[k] <- 1
+      log_post <- log_post_prop
+      acceptance[k] <- TRUE
 
     } else {
 
-      theta_vals[k+1, ] <- theta_curr
-      acceptance[k] <- 0
+      theta_vals[k+1, ] <- theta_vals[k, ]
+      acceptance[k] <- FALSE
+    }
+
+
+    # "Random" parameters (proposed/accepted separately)
+
+    # Now hold other parameters steady
+    # Random effects have standard deviation exp(log_sigma_b)
+    b_prop <- rnorm(ncol(Z), mean = b, sd = exp(theta_prop[4]))
+
+    # Use (possibly newly accepted) values of theta
+    log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
+
+    accept_prob_b <- min(exp(log_post_prop_b - log_post), Inf, na.rm = TRUE)
+
+    if (accept_prob_b > runif(1)) {
+
+      theta_vals[k+1, 4] <- theta_prop[4]
+      b <- b_prop
+      log_post <- log_post_prop
+      acceptance_b[k] <- TRUE
+
+    } else {
+
+      acceptance_b[k] <- FALSE
     }
 
     setTxtProgressBar(pb, value = k, label = if (k <= burnin) "Burn-in" else "Main run")
-
   }
 
 
@@ -274,18 +150,19 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   close(pb)
   cat(sprintf("Total acceptance:     %.3f%%\n", mean(acceptance)*100))
   cat(sprintf("Burned-in acceptance: %.3f%%\n", mean(acceptance[-(1:burnin)])*100))
+  cat(sprintf("Burned-in b acceptance: %.3f%%\n", mean(acceptance_b[-(1:burnin)])*100))
 
   theta_vals
 }
 
 
 
-zz <- mcmc_mh(3000, 500, rep(1, 4), c(0.2, 0.1, 0.1, 0.1), rats$time, X, Z)
+zz <- mcmc_mh(10000, 1000, c(6, -3, -2, -500), c(0.5, 0.1, 1, 1), rats$time, X, Z)
 
 
 
 
-
+# TODO below this
 
 
 
