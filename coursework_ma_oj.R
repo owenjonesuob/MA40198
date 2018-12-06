@@ -43,7 +43,6 @@ log_posterior <- function(theta, y, b, X, Z) {
   status <- X[, 2]
 
   # Log conditional density of y given b
-  # Sometimes we sum lots of -Infs and get NaN... prevent this
   lfy_b <- sum(
     status * weib_re_prob(y, eta, log_sigma),
     (1-status) * weib_re_surv(y, eta, log_sigma)
@@ -75,12 +74,13 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   theta_vals <- matrix(NA, nrow = iters+1, ncol = 4)
   theta_vals[1, ] <- init_params
 
-  b <- rep(0, ncol(Z))
+  b_vals <- matrix(NA, nrow = iters+1, ncol = ncol(Z))
+  b_vals[1, ] <- 0
 
   acceptance <- rep(NA, iters)
   acceptance_b <- rep(NA, iters)
 
-  log_post <- log_posterior(init_params, y, b, X, Z)
+  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
 
   # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
@@ -90,12 +90,14 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   for (k in seq_len(iters)) {
 
 
-    # "Non-random" parameters: we're ignoring log_sigma_b for now
-    theta_prop <- rnorm(4, mean = theta_vals[k, ], sd = tuners)
+    # "Non-random" parameters
+    # Hold log_sigma_b at current value
+    theta_prop <- c(rnorm(3, mean = theta_vals[k, 1:3], sd = tuners[1:3]), theta_vals[k, 4])
 
-    log_post_prop <- log_posterior(theta_prop, y, b, X, Z)
+    log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
 
-    accept_prob <- min(exp(log_post_prop - log_post), Inf, na.rm = TRUE)
+    accept_prob <- #min(
+      exp(log_post_prop - log_post)#, Inf, na.rm = TRUE)
 
     if (accept_prob > runif(1)) {
 
@@ -114,26 +116,29 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
 
     # Now hold other parameters steady
     # Random effects have standard deviation exp(log_sigma_b)
-    b_prop <- rnorm(ncol(Z), mean = b, sd = exp(theta_prop[4]))
+    log_sigma_b_prop <- rnorm(1, mean = theta_vals[k, 4], sd = tuners[4])
+    b_prop <- rnorm(ncol(Z), mean = 0, sd = exp(log_sigma_b_prop))
 
     # Use (possibly newly accepted) values of theta
-    log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
+    log_post_prop_b <- log_posterior(c(theta_vals[k+1, 1:3], log_sigma_b_prop), y, b_prop, X, Z)
 
-    accept_prob_b <- min(exp(log_post_prop_b - log_post), Inf, na.rm = TRUE)
+    accept_prob_b <- #min(
+      exp(log_post_prop_b - log_post)#, Inf, na.rm = TRUE)
 
     if (accept_prob_b > runif(1)) {
 
-      theta_vals[k+1, 4] <- theta_prop[4]
-      b <- b_prop
-      log_post <- log_post_prop
+      theta_vals[k+1, 4] <- log_sigma_b_prop
+      b_vals[k+1, ] <- b_prop
+      log_post <- log_post_prop_b
       acceptance_b[k] <- TRUE
 
     } else {
 
+      b_vals[k+1, ] <- b_vals[k, ]
       acceptance_b[k] <- FALSE
     }
 
-    setTxtProgressBar(pb, value = k, label = if (k <= burnin) "Burn-in" else "Main run")
+    setTxtProgressBar(pb, value = k)
   }
 
 
@@ -152,14 +157,16 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   cat(sprintf("Burned-in acceptance: %.3f%%\n", mean(acceptance[-(1:burnin)])*100))
   cat(sprintf("Burned-in b acceptance: %.3f%%\n", mean(acceptance_b[-(1:burnin)])*100))
 
-  theta_vals
+  list(theta = theta_vals, b = b_vals)
 }
 
 
 
-zz <- mcmc_mh(10000, 1000, c(6, -3, -2, -500), c(0.5, 0.1, 1, 1), rats$time, X, Z)
+zz <- mcmc_mh(3000, 1000, c(6, -2, -2, -50), c(0.4, 0.3, 0.1, 0.2), rats$time, X, Z)
 
 
+
+pairs(cbind(zz$theta, zz$b[, 1:4]), pch = ".")
 
 
 # TODO below this
