@@ -90,15 +90,15 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
   for (k in seq_len(iters)) {
     
     
-    # "Non-random" parameters
+    # Parameters - i.e. all except b 
     theta_prop <- c(rnorm(4, mean = theta_vals[k, ], sd = tuners[1:4]))
     
-    
+    #Don't use new proposal if proposed sigma_b is less than or equal to 0  
     if (theta_prop[4]>0) log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
     
     accept_prob <-exp(log_post_prop - log_post)
     
-    
+    #Reject if proposed sigma_b is less than or equal to 0 
     if (theta_prop[4]>0 && accept_prob > runif(1)) {
       
       theta_vals[k+1, ] <- theta_prop
@@ -112,9 +112,9 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
     }
     
     
-    # "Random" parameters (proposed/accepted separately)
+    # b (proposed/accepted separately)
     
-    # Now hold other parameters steady
+    # Now hold parameters steady
     b_prop <- rnorm(ncol(Z), mean = b_vals[k,], sd = tuners[5])
     
     # Use (possibly newly accepted) values of theta
@@ -159,7 +159,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, y, X, Z, show_plot = TRU
 }
 
 
-
+#Trying to find some good tuning parameters with acceptance rate of 25% (doing it pretty randomly...)
 
 q1=sample(seq(from=0.5, to=3, by=0.05),50, replace=TRUE)
 q2=sample(seq(from=0.5, to=3, by=0.05),50, replace=TRUE)
