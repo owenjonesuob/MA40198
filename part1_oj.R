@@ -1,4 +1,6 @@
 
+set.seed(101010)
+
 # Import data
 rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
 
@@ -231,30 +233,6 @@ weib_re_surv <- deriv(
 
 
 
-#
-# weib_re_prob <- deriv(
-#   expression(
-#     -log_sigma - (beta0 + beta1*treated + b) + (1/exp(log_sigma) - 1)*(log(t) - (beta0 + beta1*treated + b)) - (t/exp(beta0 + beta1*treated + b))^(1/exp(log_sigma))
-#   ),
-#   namevec = c("beta0", "beta1", "b"),
-#   function.arg = c("t", "beta0", "beta1", "b", "log_sigma"),
-#   hessian = TRUE
-# )
-#
-#
-# weib_re_surv <- deriv(
-#   expression(
-#     -(t/exp(beta0 + beta1*treated + b))^(1/exp(log_sigma))
-#   ),
-#   namevec = c("beta0", "beta1", "b"),
-#   function.arg = c("t", "beta0", "beta1", "b", "log_sigma"),
-#   hessian = TRUE
-# )
-
-
-
-
-
 
 # Log-likelihood function l(y) = l(y, b)
 lfyb <- function(theta, y, b, X, Z) {
@@ -358,8 +336,8 @@ lal(rep(1, 4), y, X, Z)
 # Guess some starting values
 # TODO justfy these
 theta_init <- c("beta0" = 5,
-                "beta1" = -0.2,
-                "log_sigma" = -1.5,
+                "beta1" = -1,
+                "log_sigma" = -1,
                 "log_sigma_b" = -2)
 
 
@@ -605,22 +583,72 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 
 
-iters <- 10000
+iters <- 20000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin,
-                 c(beta0 = 4, beta1 = 0, log_sigma = 0, log_sigma_b = -1),
-                 rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03,
-                 rats[, c("time", "status")], X, Z)
+pilot <- mcmc_mh(
+  iters, burnin,
+  c(beta0 = 4, beta1 = 0, log_sigma = 0, log_sigma_b = -1),
+  rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03,
+  rats[, c("time", "status")], X, Z
+)
 
 
-D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
-psych::pairs.panels(tail(D, 1000)[, 1:8], pch = ".")
+D <- cbind(pilot$theta, pilot$b)[-(1:burnin), ]
+psych::pairs.panels(tail(D, 5000)[, 1:ncol(pilot$theta)], pch = ".")
+
 
 cov_D <- cov(D)
 
+iters <- 50000
+burnin <- 1000
 
-zz <- mcmc_mh_cov(10000, 1000,
-                  drop(tail(pilot$theta, 1)),
-                  drop(tail(pilot$b, 1)), cov_D, 0.1,
-                  rats[, c("time", "status")], X, Z)
+adjusted <- mcmc_mh_cov(
+  iters, burnin,
+  drop(tail(pilot$theta, 1)),
+  drop(tail(pilot$b, 1)),
+  cov_D, 0.1,
+  rats[, c("time", "status")], X, Z
+)
 
+
+adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
+psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+
+
+par(mfrow = c(2, 2))
+
+ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
+
+  # Calculate autocorrelation in MH sample for parameter
+  y <- adjusted$theta[-(1:burnin), nm]
+  autocorr <- acf(y, main = nm)
+
+  # Autocorrelation length
+  acl <- 2*sum(autocorr$acf) + 1
+
+  # Sample of acl-spaced observations
+  ac_smp <- y[seq(from = sample(1:acl, 1), to = length(y), by = acl)]
+
+  # Test whether two halves of this sample are from same distribution
+  # If p-value is significant, this means samples are (likely) from same dist
+  idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
+  ks.test(ac_smp[idx], ac_smp[-idx])$p.value
+
+}, FUN.VALUE = 0)
+
+par(mfrow = c(1, 1))
+
+# p-values as just calculated
+ks_pvals
+
+
+
+# Credible intervals for each parameter
+cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
+
+  y <- adjusted$theta[-(1:burnin), nm]
+  quantile(y, c(0.025, 0.975))
+
+}, FUN.VALUE = c(0, 0))
+
+cred_ints
