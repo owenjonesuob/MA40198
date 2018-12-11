@@ -583,7 +583,7 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 
 
-iters <- 20000
+iters <- 100000
 burnin <- 2000
 pilot <- mcmc_mh(
   iters, burnin,
@@ -627,7 +627,7 @@ ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
   acl <- 2*sum(autocorr$acf) + 1
 
   # Sample of acl-spaced observations
-  ac_smp <- y[seq(from = sample(1:acl, 1), to = length(y), by = acl)]
+  ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
 
   # Test whether two halves of this sample are from same distribution
   # If p-value is significant, this means samples are (likely) from same dist

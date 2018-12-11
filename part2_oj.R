@@ -1,4 +1,6 @@
 
+set.seed(528491)
+
 fatigue <- read.table("https://people.bath.ac.uk/kai21/ASI/fatigue.txt")
 
 
@@ -155,22 +157,68 @@ log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$ro)
 
 
 
-iters <- 50000
+iters <- 100000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin,
-                 c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
-                 rep(66, 26), rep(0.03, 5), 0.12,
-                 fatigue$N, fatigue$s, fatigue$ro)
+pilot <- mcmc_mh(
+  iters, burnin,
+  c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
+  rep(66, 26), rep(0.03, 5), 0.12,
+  fatigue$N, fatigue$s, fatigue$ro
+)
 
 
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
 cov_D <- cov(D)
 
 
-zz <- mcmc_mh_cov(50000, 1000,
-                  drop(tail(pilot$theta, 1)),
-                  drop(tail(pilot$b, 1)), cov_D, 0.35,
-                  fatigue$N, fatigue$s, fatigue$ro)
+adjusted <- mcmc_mh_cov(
+  50000, 1000,
+  drop(tail(pilot$theta, 1)),
+  drop(tail(pilot$b, 1)), cov_D, 0.2,
+  fatigue$N, fatigue$s, fatigue$ro
+)
 
 
+
+adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
+psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+
+
+par(mfrow = c(2, 3))
+
+ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
+
+  # Calculate autocorrelation in MH sample for parameter
+  y <- adjusted$theta[-(1:burnin), nm]
+  autocorr <- acf(y, main = nm)
+
+  # Autocorrelation length
+  acl <- 2*sum(autocorr$acf) + 1
+
+  # Sample of acl-spaced observations
+  ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
+
+  # Test whether two halves of this sample are from same distribution
+  # If p-value is significant, this means samples are (likely) from same dist
+  idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
+  ks.test(ac_smp[idx], ac_smp[-idx])$p.value
+
+}, FUN.VALUE = 0)
+
+par(mfrow = c(1, 1))
+
+# p-values as just calculated
+ks_pvals
+
+
+
+# Credible intervals for each parameter
+cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
+
+  y <- adjusted$theta[-(1:burnin), nm]
+  quantile(y, c(0.025, 0.975))
+
+}, FUN.VALUE = c(0, 0))
+
+cred_ints
 
