@@ -436,18 +436,18 @@ log_posterior(c(1, 1, 1, 1), rats[, c("time", "status")], rep(0.1, ncol(Z)), X, 
 
 
 
-mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
+mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
 
-  theta_vals <- matrix(NA, nrow = iters+1, ncol = 4)
+  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
   theta_vals[1, ] <- init_params
 
-  b_vals <- matrix(NA, nrow = iters+1, ncol = ncol(Z))
-  b_vals[1, ] <- 0
+  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
+  b_vals[1, ] <- init_bs
 
   acceptance <- rep(NA, iters)
   acceptance_b <- rep(NA, iters)
 
-  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
+  log_post <- log_posterior(init_params, y, init_bs, X, Z)
 
   # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
@@ -458,7 +458,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
 
     # "Non-random" parameters
-    theta_prop <- rnorm(4, mean = theta_vals[k, ], sd = tuners)
+    theta_prop <- rnorm(length(init_params), mean = theta_vals[k, ], sd = tuners)
 
 
     log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
@@ -482,7 +482,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
     # Now hold other parameters steady
     # Random effects have standard deviation exp(log_sigma_b)
-    b_prop <- rnorm(ncol(Z), mean = b_vals[k, ], sd = b_tuner)
+    b_prop <- rnorm(length(init_bs), mean = b_vals[k, ], sd = b_tuner)
 
     # Use (possibly newly accepted) values of theta
     log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
@@ -508,7 +508,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
   if (show_plot) {
 
     rows <- floor(sqrt(ncol(theta_vals)))
-    par(mfrow = c(rows, rows+(rows%%2)))
+    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
 
     apply(theta_vals, 2, function(y) {
       plot(y, type = "l")
@@ -582,7 +582,7 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
   if (show_plot) {
 
     rows <- floor(sqrt(ncol(theta_vals)))
-    par(mfrow = c(rows, rows+(rows%%2)))
+    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
 
     apply(theta_vals, 2, function(y) {
       plot(y, type = "l")
@@ -603,7 +603,7 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 iters <- 50000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
+pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
 
 
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
@@ -612,5 +612,5 @@ psych::pairs.panels(tail(D, 1000)[, 1:8], pch = ".")
 cov_D <- cov(D)
 
 
-zz <- mcmc_mh_cov(10000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.08, rats[, c("time", "status")], X, Z)
+zz <- mcmc_mh_cov(50000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.08, rats[, c("time", "status")], X, Z)
 
