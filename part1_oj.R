@@ -357,9 +357,9 @@ lal(rep(1, 4), y, X, Z)
 # Now we want to minimise negative log-likelihood (as returned by lal())
 # Guess some starting values
 # TODO justfy these
-theta_init <- c("beta0" = 6,
-                "beta1" = -1,
-                "log_sigma" = -2,
+theta_init <- c("beta0" = 5,
+                "beta1" = -0.2,
+                "log_sigma" = -1.5,
                 "log_sigma_b" = -2)
 
 
@@ -507,9 +507,9 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
   if (show_plot) {
     par(mfrow = c(2, 2))
-    apply(theta_vals, 2, function(x) {
+    apply(theta_vals, 2, function(y) {
       plot(x, type = "l")
-      rect(0, min(x), burnin, min(y), density = 10, col = "red")
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
     par(mfrow = c(1, 1))
   }
@@ -525,7 +525,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
 iters <- 50000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.07, rats[, c("time", "status")], X, Z)
+pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
 
 
 
@@ -548,19 +548,18 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
   log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
 
+  # Propositions for all iterations
+  props <- MASS::mvrnorm(iters, mu = c(init_params, init_bs), Sigma = tuner^2 * cov_matrix)
+
   # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
-
 
   # MCMC loop
   for (k in seq_len(iters)) {
 
-
-    prop <- MASS::mvrnorm(1, mu = c(theta_vals[k, ], b_vals[k, ]), Sigma = (tuner^2 * cov_matrix))
-
-    theta_prop <- prop[1:length(init_params)]
-    b_prop <- prop[(length(init_params)+1):length(prop)]
-
+    # Use proposed values for theta and b
+    theta_prop <- props[k, 1:length(init_params)]
+    b_prop <- props[k, (length(init_params)+1):ncol(props)]
 
     log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
 
@@ -587,9 +586,9 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
   if (show_plot) {
     par(mfrow = c(2, 2))
-    apply(theta_vals, 2, function(x) {
-      plot(x, type = "l")
-      rect(0, min(x), burnin, min(y), density = 10, col = "red")
+    apply(theta_vals, 2, function(y) {
+      plot(y, type = "l")
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
     par(mfrow = c(1, 1))
   }
@@ -609,5 +608,5 @@ psych::pairs.panels(tail(D, 1000)[, 1:8], pch = ".")
 cov_D <- cov(D)
 
 
-zz <- mcmc_mh_cov(5000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.1, rats[, c("time", "status")], X, Z)
+zz <- mcmc_mh_cov(10000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.08, rats[, c("time", "status")], X, Z)
 
