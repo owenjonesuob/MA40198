@@ -203,6 +203,7 @@ rats$litter <- factor(rats$litter)
 
 X <- model.matrix(~ 1 + rx, data = rats)
 Z <- model.matrix(~ litter - 1, data = rats)
+y <- rats[, c("time", "status")]
 
 
 
@@ -228,6 +229,33 @@ weib_re_surv <- deriv(
 
 
 
+
+
+#
+# weib_re_prob <- deriv(
+#   expression(
+#     -log_sigma - (beta0 + beta1*treated + b) + (1/exp(log_sigma) - 1)*(log(t) - (beta0 + beta1*treated + b)) - (t/exp(beta0 + beta1*treated + b))^(1/exp(log_sigma))
+#   ),
+#   namevec = c("beta0", "beta1", "b"),
+#   function.arg = c("t", "beta0", "beta1", "b", "log_sigma"),
+#   hessian = TRUE
+# )
+#
+#
+# weib_re_surv <- deriv(
+#   expression(
+#     -(t/exp(beta0 + beta1*treated + b))^(1/exp(log_sigma))
+#   ),
+#   namevec = c("beta0", "beta1", "b"),
+#   function.arg = c("t", "beta0", "beta1", "b", "log_sigma"),
+#   hessian = TRUE
+# )
+
+
+
+
+
+
 # Log-likelihood function l(y) = l(y, b)
 lfyb <- function(theta, y, b, X, Z) {
 
@@ -237,12 +265,13 @@ lfyb <- function(theta, y, b, X, Z) {
 
   eta <- X%*%beta + Z%*%b
 
-  status <- X[, 2]
+  status <- y[, "status"]
+  time <- y[, "time"]
 
   # Log conditional density of y given b
   lfy_b <- sum(
-    status * weib_re_prob(y, eta, log_sigma),
-    (1-status) * weib_re_surv(y, eta, log_sigma)
+    status * weib_re_prob(time, eta, log_sigma),
+    (1-status) * weib_re_surv(time, eta, log_sigma)
   )
 
   # Log marginal density of b
@@ -254,13 +283,13 @@ lfyb <- function(theta, y, b, X, Z) {
 
   # Gradient of log-likelihood with respect to b
   # 2 terms: d(lfy_b)/db + d(lfb)/db
-  g <- t(Z) %*% (status*attr(weib_re_prob(y, eta, log_sigma), "gradient") + (1-status)*attr(weib_re_surv(y, eta, log_sigma), "gradient")) - b/(exp(log_sigma_b)^2)
+  g <- t(Z) %*% (status*attr(weib_re_prob(time, eta, log_sigma), "gradient") + (1-status)*attr(weib_re_surv(time, eta, log_sigma), "gradient")) - b/(exp(log_sigma_b)^2)
 
   # Hessian of log-likelihood wrt b i.e. dl/(db db^T)) will be diagonal since
   # taking derivative wrt bi then wrt bj where j!=i gives us 0
   # i.e. we can use "hessian" from weib_me_*()
   # So H_diag is the diagonal entries from the Hessian matrix (and all other entries are 0)
-  H_diag <- t(Z) %*% (status*attr(weib_re_prob(y, eta, log_sigma), "hessian") + (1-status)*attr(weib_re_surv(y, eta, log_sigma), "hessian")) - 1/(exp(log_sigma_b)^2)
+  H_diag <- t(Z) %*% (status*attr(weib_re_prob(time, eta, log_sigma), "hessian") + (1-status)*attr(weib_re_surv(time, eta, log_sigma), "hessian")) - 1/(exp(log_sigma_b)^2)
 
   list(lf = lf, g = g, H_diag = H_diag)
 
@@ -269,7 +298,7 @@ lfyb <- function(theta, y, b, X, Z) {
 
 
 # Check that output seems OK
-lfyb(rep(1, 4), rats$time, rep(0, ncol(Z)), X, Z)
+lfyb(rep(1, 4), y, rep(0, ncol(Z)), X, Z)
 
 
 
@@ -321,22 +350,40 @@ lal <- function(theta, y, X, Z) {
 
 
 # Check that output is OK
-lal(rep(1, 4), rats$time, X, Z)
+lal(rep(1, 4), y, X, Z)
+
 
 
 # Now we want to minimise negative log-likelihood (as returned by lal())
 # Guess some starting values
 # TODO justfy these
-theta_init <- c(6, -2, -2, -2)
+theta_init <- c("beta0" = 6,
+                "beta1" = -1,
+                "log_sigma" = -2,
+                "log_sigma_b" = -2)
 
 
 opt <- optim(
   theta_init,
   fn = lal,
-  y = rats$time,
+  y = rats[, c("time", "status")],
   X = model.matrix(~ 1 + rx, data = rats),
   Z = model.matrix(~ litter - 1, data = rats),
   method = "BFGS",
-  control = list(trace = 1, maxit = 100)
+  hessian = TRUE,
+  control = list(trace = 1, maxit = 1000)
 )
 
+
+
+# Calculate standard errors from inverse Hessian
+std_err <- sqrt(diag(solve(opt$hessian)))
+
+# 95% confidence interval for each parameter
+# Note asymptotic distribution is normal
+data.frame(
+  val = opt$par,
+  se = std_err,
+  lower = opt$par - qnorm(0.975)*std_err,
+  upper = opt$par + qnorm(0.975)*std_err
+)
