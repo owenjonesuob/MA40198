@@ -439,6 +439,7 @@ log_posterior(c(1, 1, 1, 1), rats[, c("time", "status")], rep(0.1, ncol(Z)), X, 
 mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
 
   theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  colnames(theta_vals) <- names(init_params)
   theta_vals[1, ] <- init_params
 
   b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
@@ -510,8 +511,9 @@ mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, 
     rows <- floor(sqrt(ncol(theta_vals)))
     par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
 
-    apply(theta_vals, 2, function(y) {
-      plot(y, type = "l")
+    lapply(names(init_params), function(nm) {
+      y <- theta_vals[, nm]
+      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
       rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
 
@@ -532,6 +534,7 @@ mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, 
 mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, y, X, Z, show_plot = TRUE) {
 
   theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  colnames(theta_vals) <- names(init_params)
   theta_vals[1, ] <- init_params
 
   b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
@@ -584,8 +587,9 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
     rows <- floor(sqrt(ncol(theta_vals)))
     par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
 
-    apply(theta_vals, 2, function(y) {
-      plot(y, type = "l")
+    lapply(names(init_params), function(nm) {
+      y <- theta_vals[, nm]
+      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
       rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
 
@@ -601,9 +605,12 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 
 
-iters <- 50000
+iters <- 10000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
+pilot <- mcmc_mh(iters, burnin,
+                 c(beta0 = 4, beta1 = 0, log_sigma = 0, log_sigma_b = -1),
+                 rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03,
+                 rats[, c("time", "status")], X, Z)
 
 
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
@@ -612,5 +619,8 @@ psych::pairs.panels(tail(D, 1000)[, 1:8], pch = ".")
 cov_D <- cov(D)
 
 
-zz <- mcmc_mh_cov(50000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.08, rats[, c("time", "status")], X, Z)
+zz <- mcmc_mh_cov(10000, 1000,
+                  drop(tail(pilot$theta, 1)),
+                  drop(tail(pilot$b, 1)), cov_D, 0.1,
+                  rats[, c("time", "status")], X, Z)
 

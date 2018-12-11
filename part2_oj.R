@@ -157,13 +157,20 @@ log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$ro)
 
 iters <- 50000
 burnin <- 2000
-pilot <- mcmc_mh(iters, burnin, c(18, -2, -1, 4, -2), rep(66, 26), rep(0.03, 5), 0.15, fatigue$N, fatigue$s, fatigue$ro)
+pilot <- mcmc_mh(iters, burnin,
+                 c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
+                 rep(66, 26), rep(0.03, 5), 0.12,
+                 fatigue$N, fatigue$s, fatigue$ro)
 
 
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
 cov_D <- cov(D)
 
-zz <- mcmc_mh_cov(50000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.35, fatigue$N, fatigue$s, fatigue$ro)
+
+zz <- mcmc_mh_cov(50000, 1000,
+                  drop(tail(pilot$theta, 1)),
+                  drop(tail(pilot$b, 1)), cov_D, 0.35,
+                  fatigue$N, fatigue$s, fatigue$ro)
 
 
 
