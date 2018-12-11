@@ -76,7 +76,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
   theta_vals[1, ] <- init_params
 
   b_vals <- matrix(NA, nrow = iters+1, ncol = ncol(Z))
-  b_vals[1, ] <- 0
+  b_vals[1, ] <- rnorm(ncol(Z), mean = 0, sd = b_tuner)
 
   acceptance <- rep(NA, iters)
   acceptance_b <- rep(NA, iters)
@@ -92,8 +92,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
 
     # "Non-random" parameters
-    theta_prop <- rnorm(4, mean = theta_vals[k, ], sd = tuners)
-
+    theta_prop <- c(rnorm(3, mean = theta_vals[k, 1:3], sd = tuners[1:3]), theta_vals[k, 4])
 
     log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
 
@@ -116,15 +115,17 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
     # Now hold other parameters steady
     # Random effects have standard deviation exp(log_sigma_b)
-    b_prop <- rnorm(ncol(Z), mean = b_vals[k, ], sd = b_tuner)
+    log_sigma_b_prop <- rnorm(1, mean = theta_vals[k, 4], sd = tuners[4])
+    b_prop <- rnorm(ncol(Z), mean = 0, sd = exp(log_sigma_b_prop))
 
     # Use (possibly newly accepted) values of theta
-    log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
+    log_post_prop_b <- log_posterior(c(theta_vals[k+1, 1:3], log_sigma_b_prop), y, b_prop, X, Z)
 
     accept_prob_b <- exp(log_post_prop_b - log_post)
 
     if (accept_prob_b > runif(1)) {
 
+      theta_vals[k+1, 4] <- log_sigma_b_prop
       b_vals[k+1, ] <- b_prop
       log_post <- log_post_prop_b
       acceptance_b[k] <- TRUE
@@ -141,10 +142,9 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
   if (show_plot) {
     par(mfrow = c(2, 2))
-    apply(theta_vals, 2, function(x) {
-      plot(x, type = "l")
-      abline(v = burnin, col = "red")
-      rect(0, min(x), burnin, min(y), density = 10, col = "red")
+    apply(theta_vals, 2, function(y) {
+      plot(y, type = "l")
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
     par(mfrow = c(1, 1))
   }
@@ -158,8 +158,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 }
 
 
-zz <- mcmc_mh(50000, 2000, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.07, rats[, c("time", "status")], X, Z)
-
+zz <- mcmc_mh(10000, 2000, c(4, 0, 0, -6), c(0.1, 0.1, 0.1, 0.2), 2, rats[, c("time", "status")], X, Z)
 
 
 pairs(cbind(zz$theta, zz$b[, 1:4]), pch = ".")
