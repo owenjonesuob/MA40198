@@ -40,12 +40,13 @@ log_posterior <- function(theta, y, b, X, Z) {
 
   eta <- X%*%beta + Z%*%b
 
-  status <- X[, 2]
+  time <- y[, "time"]
+  status <- y[, "status"]
 
   # Log conditional density of y given b
   lfy_b <- sum(
-    status * weib_re_prob(y, eta, log_sigma),
-    (1-status) * weib_re_surv(y, eta, log_sigma)
+    status * weib_re_prob(time, eta, log_sigma),
+    (1-status) * weib_re_surv(time, eta, log_sigma)
   )
 
   # Log marginal density of b
@@ -63,7 +64,7 @@ log_posterior <- function(theta, y, b, X, Z) {
 }
 
 
-log_posterior(c(1, 1, 1, 1), rats$time, rep(0.1, ncol(Z)), X, Z)
+log_posterior(c(1, 1, 1, 1), rats[, c("time", "status")], rep(0.1, ncol(Z)), X, Z)
 
 
 
@@ -157,7 +158,7 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 }
 
 
-zz <- mcmc_mh(20000, 5000, c(4, 0, 0, -1), c(0.12, 0.12, 0.01, 0.05), 0.02, rats$time, X, Z)
+zz <- mcmc_mh(50000, 2000, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.07, rats[, c("time", "status")], X, Z)
 
 
 
