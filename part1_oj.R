@@ -523,5 +523,91 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 }
 
 
-zz <- mcmc_mh(50000, 2000, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.07, rats[, c("time", "status")], X, Z)
+iters <- 50000
+burnin <- 2000
+pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.07, rats[, c("time", "status")], X, Z)
+
+
+
+
+
+
+
+
+
+
+mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, y, X, Z, show_plot = TRUE) {
+
+  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  theta_vals[1, ] <- init_params
+
+  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
+  b_vals[1, ] <- init_bs
+
+  acceptance <- rep(NA, iters)
+
+  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
+
+  # Progress bar in console
+  pb <- txtProgressBar(min = 0, max = iters, style = 3)
+
+
+  # MCMC loop
+  for (k in seq_len(iters)) {
+
+
+    prop <- MASS::mvrnorm(1, mu = c(theta_vals[k, ], b_vals[k, ]), Sigma = (tuner^2 * cov_matrix))
+
+    theta_prop <- prop[1:length(init_params)]
+    b_prop <- prop[(length(init_params)+1):length(prop)]
+
+
+    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
+
+    accept_prob <- exp(log_post_prop - log_post)
+
+    if (accept_prob > runif(1)) {
+
+      theta_vals[k+1, ] <- theta_prop
+      b_vals[k+1, ] <- b_prop
+      log_post <- log_post_prop
+      acceptance[k] <- TRUE
+
+    } else {
+
+      theta_vals[k+1, ] <- theta_vals[k, ]
+      b_vals[k+1, ] <- b_vals[k, ]
+      acceptance[k] <- FALSE
+    }
+
+
+    setTxtProgressBar(pb, value = k)
+  }
+
+
+  if (show_plot) {
+    par(mfrow = c(2, 2))
+    apply(theta_vals, 2, function(x) {
+      plot(x, type = "l")
+      rect(0, min(x), burnin, min(y), density = 10, col = "red")
+    })
+    par(mfrow = c(1, 1))
+  }
+
+  close(pb)
+  cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
+  cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
+
+  list(theta = theta_vals, b = b_vals)
+}
+
+
+
+D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
+psych::pairs.panels(tail(D, 1000)[, 1:8], pch = ".")
+
+cov_D <- cov(D)
+
+
+zz <- mcmc_mh_cov(5000, 1000, tail(pilot$theta, 1), tail(pilot$b, 1), cov_D, 0.1, rats[, c("time", "status")], X, Z)
 
