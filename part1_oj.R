@@ -506,11 +506,15 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
 
   if (show_plot) {
-    par(mfrow = c(2, 2))
+
+    rows <- floor(sqrt(ncol(theta_vals)))
+    par(mfrow = c(rows, rows+(rows%%2)))
+
     apply(theta_vals, 2, function(y) {
-      plot(x, type = "l")
+      plot(y, type = "l")
       rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
+
     par(mfrow = c(1, 1))
   }
 
@@ -521,17 +525,6 @@ mcmc_mh <- function(iters, burnin, init_params, tuners, b_tuner, y, X, Z, show_p
 
   list(theta = theta_vals, b = b_vals)
 }
-
-
-iters <- 50000
-burnin <- 2000
-pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
-
-
-
-
-
-
 
 
 
@@ -551,8 +544,10 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
   # Propositions for all iterations
   props <- MASS::mvrnorm(iters, mu = c(init_params, init_bs), Sigma = tuner^2 * cov_matrix)
 
+
   # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
+
 
   # MCMC loop
   for (k in seq_len(iters)) {
@@ -585,11 +580,15 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 
   if (show_plot) {
-    par(mfrow = c(2, 2))
+
+    rows <- floor(sqrt(ncol(theta_vals)))
+    par(mfrow = c(rows, rows+(rows%%2)))
+
     apply(theta_vals, 2, function(y) {
       plot(y, type = "l")
       rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
+
     par(mfrow = c(1, 1))
   }
 
@@ -600,6 +599,11 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
   list(theta = theta_vals, b = b_vals)
 }
 
+
+
+iters <- 50000
+burnin <- 2000
+pilot <- mcmc_mh(iters, burnin, c(4, 0, 0, -1), c(0.1, 0.1, 0.1, 0.1), 0.03, rats[, c("time", "status")], X, Z)
 
 
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
