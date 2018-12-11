@@ -7,11 +7,9 @@ fatigue <- read.table("https://people.bath.ac.uk/kai21/ASI/fatigue.txt")
 #  l_gamma = log(gamma / (min(fatigue$s) - gamma))
 N_prob <- deriv(
   expression(
-    log(
-      (1/exp(log_sigma)) / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta) *
-        (y / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta))^((1/exp(log_sigma)) - 1) *
-        exp(-(y / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta))^(1/exp(log_sigma)))
-    )
+      -log_sigma - log_alpha - delta*log(s - min_s/(1 + exp(-l_gamma))) +
+        ((1/exp(log_sigma)) - 1) * (log(y) - log_alpha - delta*log(s - min_s/(1 + exp(-l_gamma)))) -
+        (y / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta))^(1/exp(log_sigma))
   ),
   namevec = c("log_alpha", "delta", "log_sigma", "l_gamma"),
   function.arg = c("y", "s", "min_s", "log_alpha", "delta", "log_sigma", "l_gamma"),
@@ -119,6 +117,8 @@ ggplot(fatigue, aes(x = s)) +
 
 
 
+
+
 log_posterior <- function(theta, y, b, stress, runout) {
 
   log_alpha <- theta[1]
@@ -150,7 +150,7 @@ log_posterior <- function(theta, y, b, stress, runout) {
 }
 
 
-log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$runout)
+log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$ro)
 
 
 
@@ -169,7 +169,7 @@ mcmc_mh_f <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, s
   acceptance <- rep(NA, iters)
   acceptance_b <- rep(NA, iters)
 
-  log_post <- log_posterior(init_params, y, b_vals[1, ], stress, runout)
+  log_post <- log_posterior(init_params, y, init_bs, stress, runout)
 
   # Progress bar in console
   pb <- txtProgressBar(min = 0, max = iters, style = 3)
@@ -181,7 +181,6 @@ mcmc_mh_f <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, s
 
     # "Non-random" parameters
     theta_prop <- rnorm(5, mean = theta_vals[k, ], sd = tuners)
-
 
     log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], stress, runout)
 
@@ -204,7 +203,7 @@ mcmc_mh_f <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, s
 
     # Now hold other parameters steady
     # Random effects have standard deviation exp(log_sigma_b)
-    b_prop <- rnorm(26, mean = b_vals[k, ], sd = b_tuner)
+    b_prop <- rnorm(length(init_bs), mean = b_vals[k, ], sd = b_tuner)
 
     # Use (possibly newly accepted) values of theta
     log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, stress, runout)
@@ -229,10 +228,9 @@ mcmc_mh_f <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, s
 
   if (show_plot) {
     par(mfrow = c(2, 3))
-    apply(theta_vals, 2, function(x) {
-      plot(x, type = "l")
-      abline(v = burnin, col = "red")
-      rect(0, min(x), burnin, min(y), density = 10, col = "red")
+    apply(theta_vals, 2, function(y) {
+      plot(y, type = "l")
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
     })
     par(mfrow = c(1, 1))
   }
@@ -246,7 +244,7 @@ mcmc_mh_f <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, s
 }
 
 
-pilot <- mcmc_mh_f(50000, 15000, c(18, -2, -1, 4, -2), rep(66, 26), rep(0.025, 5), 0.2, fatigue$N, fatigue$s, fatigue$ro, FALSE)
+pilot <- mcmc_mh_f(30000, 2000, c(18, -2, -1, 4, -2), rep(66, 26), rep(0.03, 5), 0.15, fatigue$N, fatigue$s, fatigue$ro)
 
 
 D <- cbind(pilot$theta, pilot$b)[15001:50001, ]
