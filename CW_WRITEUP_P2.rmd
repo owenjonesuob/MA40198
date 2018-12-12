@@ -2,13 +2,15 @@
 title: 'MA40198: Applied Statistical Inference'
 author: "20965, 20949 and 20969"
 date: "23/11/2018"
-output:
-  html_document:
-    df_print: paged
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(cache = FALSE)
+  
+
+# We brought this in in part 1
+library(ggplot2)
 
 
 mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
@@ -181,35 +183,169 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 ```{r eval=FALSE}
 install.packages("ggplot2")
-install.packages("psych")
+install.packages("purrr")
 ```  
 
-```{r echo=FALSE}
-set.seed(356476786) #use set.seed for reproducability, seed number found through random number generation
-```
 
 
-# Fatigue of Materials
+# Part 2: Fatigue of Materials
+
+The data used in this section can be downloaded from the following location:
 
 ```{r}
 fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
+set.seed(356476786) # Set a random seed for reproducibility
+```
+
+
+### Question 2.1
+
+In this section we investigate fatigue in material samples subjected to cyclic loading. Conceptually, this problem is very similar to the problem investigated in Part 1: that is, the Weibull distribution is at the heart of much of the following analysis, and observations are treated as censored or uncensored based on whether or not the fatigue-testing run was completed.
+
+We have assumed that $N_i$, the number of test cycles completed at stress level $s_i$ and with fatigue constant $\gamma$ for the $i$th observation, is given by
+$$N_i = \alpha (s_i - \gamma)^\delta \epsilon_i$$
+where
+$$\epsilon_i \sim \text{Weibull} \left( \text{shape} = \frac{1}{\sigma}, \; \text{scale} = 1 \right)$$
+
+Immediately we can incorporate the rest of the formula for $N_i$ into the scale parameter of this distribution, obtaining that
+$$N_i \sim \text{Weibull} \left( \text{shape} = \frac{1}{\sigma}, \; \text{scale} = \alpha (s_i - \gamma)^\delta \right)$$
+
+As in Part 1, we can now derive expressions for the negative log-likelihood and its gradient. Note that we reparameterise $\alpha$ and $\sigma$ using a log transform, since both of these parameters must always be greater than 0.
+
+```{r p2q1}
+# Expressions for Weibull distribution and survival function
+N_prob_const_gamma <- deriv(
+  expression(
+    -log_sigma - log_alpha - delta*log(s - gamma) +
+      ((1/exp(log_sigma)) - 1) * (log(y) - log_alpha - delta*log(s - gamma)) -
+      (y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+  ),
+  namevec = c("log_alpha", "delta", "log_sigma"),
+  function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+  hessian = TRUE
+)
+
+N_surv_const_gamma <- deriv(
+  expression(
+    -(y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+  ),
+  namevec = c("log_alpha", "delta", "log_sigma"),
+  function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+  hessian = TRUE
+)
+
+
+# Negative log-likelihood
+N_nll_const_gamma <- function(theta, y, gamma, stress, runout) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+
+  -sum(
+    (1-runout) * N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma),
+    runout * N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma)
+  )
+}
+
+
+# Gradient of negative log-likelihood
+N_nll_gr_const_gamma <- function(theta, y, gamma, stress, runout) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+
+  -colSums(rbind(
+    (1-runout) * attr(N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient"),
+    runout * attr(N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient")
+  ))
+}
+```
+
+Having defined these functions, we can select a value for $\gamma$ and then optimise over $\mathbf{\theta}$.
+
+```{r p2q1_opt}
+# Initial params
+theta0 <- c("log_alpha" = 2, "delta" = 1, "log_sigma" = 2)
+gamma <- 70
+
+# Minimise negative log-likelihood
+N_opt_const_gamma <- optim(
+  par = theta0,
+  fn = N_nll_const_gamma,
+  gr = N_nll_gr_const_gamma,
+  y = fatigue$N,
+  gamma = gamma,
+  stress = fatigue$s,
+  runout = fatigue$ro,
+  method = "BFGS",
+  hessian = TRUE
+)
+```
+
+This optimisation returns a set of optimised parameters, and note that we have asked `optim()` to return the Hessian matrix evaluated at these optimised values. In fact, since we have minimised the _negative_ log-likelihood, we have in fact been given the negative Hessian; inverting this yields an approximation to (asymptotic) covariance matrix, and therefore the standard errors for each parameter in $\mathbf{\theta}$ can be estimated by taking the square roots of the elements on the main diagonal. With these standard errors, we can calculate asymptotic 95% confidence intervals for each of the three parameters.
+
+```{r p2q1_std_err}
+# Calculate standard errors from inverse Hessian
+N_std_err_const_gamma <- sqrt(diag(solve(N_opt_const_gamma$hessian)))
+
+# 95% confidence interval for each parameter
+# Note asymptotic distribution of each is normal
+round(data.frame(
+  val = N_opt_const_gamma$par,
+  se = N_std_err_const_gamma,
+  lower = N_opt_const_gamma$par - qnorm(0.975)*N_std_err_const_gamma,
+  upper = N_opt_const_gamma$par + qnorm(0.975)*N_std_err_const_gamma
+), 3)
+```
+
+The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these paramaters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
+
+
+```{r p2q1_param_plots, echo=FALSE, fig.dim=c(6, 2), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
+gammas <- seq(1, min(fatigue$s), by = 1)
+
+conf_ints <- purrr::map_dfr(gammas, function(g) {
+  
+  opt <- optim(
+    par = theta0,
+    fn = N_nll_const_gamma,
+    gr = N_nll_gr_const_gamma,
+    y = fatigue$N,
+    gamma = g,
+    stress = fatigue$s,
+    runout = fatigue$ro,
+    method = "BFGS",
+    hessian = TRUE
+  )
+  
+  std_errs <- sqrt(diag(solve(opt$hessian)))
+  
+  data.frame(gamma = g, param = names(theta0), value = opt$par,
+             lower = opt$par - qnorm(0.975)*std_errs,
+             upper = opt$par + qnorm(0.975)*std_errs)
+  
+})
+
+
+ggplot(conf_ints, aes(x = gamma, fill = param)) +
+  geom_line(aes(y = value, color = param), lwd = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  facet_wrap(~ param, scales = "free_y") +
+  theme_bw() + guides(color = FALSE, fill = FALSE)
+
+
 ```
 
 
 
-#### Question 1
-  
-  
-  Need to use same code as Question 2 but without the gamma included
-
-
-
-#### Question 2
+### Question 2.2
   
 Theoretically, rather than selecting $\gamma$ ourselves it is possible to include it in the optimisation. The only slight technicality is that we must transform $\gamma$ from its current bounded interval - specifically, $\gamma \in \left( 0, \min(s_i) \right)$ - onto an unbounded interval. This is achievable via the logit transformation, i.e. we optimise using
-$$\text{l_gamma} = \text{logit} \left( \frac{\gamma}{\min(s_i)} \right) = \log \left( \frac{\gamma}{\min(s_i) - \gamma} \right)$$
+$$\text{l\_gamma} = \text{logit} \left( \frac{\gamma}{\min(s_i)} \right) = \log \left( \frac{\gamma}{\min(s_i) - \gamma} \right)$$
 
-The code from Question 1 can be adapted easily by replacing `gamma` with `min_s/(1 + exp(-l_gamma))` and by adding `l_gamma` to the list of parameters fow which we would like to return a gradient. Optimisation can then be performed as in Question 1.
+The code from Question 2.1 can be adapted easily by replacing `gamma` with `min_s/(1 + exp(-l_gamma))` and by adding `l_gamma` to the list of parameters for which we would like to return a gradient. Optimisation can then be performed as in Question 2.1.
 
   
 ```{r p2q2_N_funcs, echo=FALSE}
@@ -311,14 +447,16 @@ The optimised value of $\gamma$ can be retrieved using the inverse-logit (sigmoi
 min(fatigue$s) / (1 + exp(-N_opt$par[4]))
 ```
 
+Interestingly, this "optimal" $\gamma$ seems to lie just before the upward turn seen in Figure \ref{fig:p2q1_param_plots}, providing further evidence that the relationship between $\sigma$ and $\gamma$ is the most important factor contributing to the distribution of $N_i$.
 
 
-#### Question 3
+
+### Question 2.3
   
-  INSERT EXPLANATIONS HERE
+Using the optimised parameters from the previous section, we can compute approximate 10% and 50% quantiles for the distribution of $N$ over the range of stress values used in the fatigue testing. These are shown, alongside the recorded observations, in Figure \ref{fig:p2q3_stress_plot}; note that all but one of our observations lie clearly above the 10% quantile.
 
-```{r}
-
+```{r p2q3_stress_plot, echo=FALSE, fig.height=3, out.extra = "", fig.cap="Quantiles of our approximated distribution of N"}
+# Use parameters from previous optimisation
 alpha <- exp(N_opt$par[1])
 delta <- N_opt$par[2]
 sigma <- exp(N_opt$par[3])
@@ -331,15 +469,15 @@ ggplot(fatigue, aes(x = s)) +
   geom_point(aes(y = N)) +
   stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.1, shape = 1, scale = 1)}, aes(color = "10% quantile")) +
   stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.5, shape = 1, scale = 1)}, aes(color = "50% quantile"), linetype = "dashed") +
-  ggtitle("Estimated quantiles of fatigue") + labs(x = "Stress", y = "N", color = "Estimated quantiles") +
-  theme_bw() + theme(legend.position = c(0.8, 0.85), legend.background = element_rect(color = "black"))
+  labs(x = "Stress", y = "N", color = "Estimated quantiles") +
+  theme_bw() + theme(legend.position = c(0.85, 0.8), legend.background = element_rect(color = "black"), legend.title = element_blank())
 ```
 
 
 
-#### Question 4
+### Question 2.4
   
-  As in question 5 of part 1:
+Similar to P1Q5
   
 ```{r q4_mcmc, eval=FALSE}
 
