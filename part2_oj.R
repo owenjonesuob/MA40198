@@ -4,6 +4,97 @@ set.seed(528491)
 fatigue <- read.table("https://people.bath.ac.uk/kai21/ASI/fatigue.txt")
 
 
+
+N_prob_const_gamma <- deriv(
+  expression(
+    -log_sigma - log_alpha - delta*log(s - gamma) +
+      ((1/exp(log_sigma)) - 1) * (log(y) - log_alpha - delta*log(s - gamma)) -
+      (y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+  ),
+  namevec = c("log_alpha", "delta", "log_sigma"),
+  function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+  hessian = TRUE
+)
+
+N_surv_const_gamma <- deriv(
+  expression(
+    -(y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+  ),
+  namevec = c("log_alpha", "delta", "log_sigma"),
+  function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+  hessian = TRUE
+)
+
+
+
+
+# Negative log-likelihood
+N_nll_const_gamma <- function(theta, y, gamma, stress, runout) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+
+  -sum(
+    (1-runout) * N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma),
+    runout * N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma)
+  )
+}
+
+
+# Gradient of negative log-likelihood
+N_nll_gr_const_gamma <- function(theta, y, gamma, stress, runout) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+
+  -colSums(rbind(
+    (1-runout) * attr(N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient"),
+    runout * attr(N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient")
+  ))
+}
+
+
+
+# Initial params
+theta0 <- c("log_alpha" = 2, "delta" = 1, "log_sigma" = 2)
+gamma <- 70
+
+# Minimise negative log-likelihood
+N_opt_const_gamma <- optim(
+  par = theta0,
+  fn = N_nll_const_gamma,
+  gr = N_nll_gr_const_gamma,
+  y = fatigue$N,
+  gamma = gamma,
+  stress = fatigue$s,
+  runout = fatigue$ro,
+  method = "BFGS",
+  hessian = TRUE,
+  control = list(trace = 1, maxit = 500)
+)
+
+
+# Calculate standard errors from inverse Hessian
+N_std_err_const_gamma <- sqrt(diag(solve(N_opt$hessian)))
+
+# 95% confidence interval for each parameter
+# Note asymptotic distribution is normal
+round(data.frame(
+  val = N_opt_const_gamma$par,
+  se = N_std_err_const_gamma,
+  lower = N_opt_const_gamma$par - qnorm(0.975)*N_std_err_const_gamma,
+  upper = N_opt_const_gamma$par + qnorm(0.975)*N_std_err_const_gamma
+), 3)
+
+
+
+
+
+
+
+
 # Expressions for Weibull probability density function and Weibull survival function
 # l_gamma is logit (inverse sigmoid) transform of gamma, i.e.
 #  l_gamma = log(gamma / (min(fatigue$s) - gamma))
