@@ -198,7 +198,7 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 
 The data used in this section can be downloaded from the following location:
 
-```{r}
+```{r load_data}
 fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
 set.seed(356476786) # Set a random seed for reproducibility
 ```
