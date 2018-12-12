@@ -345,11 +345,7 @@ intgrl <- function(theta) {
 }
 
 
-intgrl(c(18, -2, -1, 4, -2))
-
-
 # Calculate log posterior again but now without any priors
-
 log_post_no_prior <- function(theta, y, b, stress, runout) {
 
   log_alpha <- theta[1]
