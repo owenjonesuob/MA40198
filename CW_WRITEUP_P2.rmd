@@ -1,13 +1,181 @@
 ---
 title: 'MA40198: Applied Statistical Inference'
-author: '20965, 20949 and 20969'
-header-includes:
-  - \usepackage{bm}
+author: "20965, 20949 and 20969"
 date: "23/11/2018"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(cache = TRUE)
+
+
+mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
+  
+  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  colnames(theta_vals) <- names(init_params)
+  theta_vals[1, ] <- init_params
+  
+  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
+  b_vals[1, ] <- init_bs
+  
+  acceptance <- rep(NA, iters)
+  acceptance_b <- rep(NA, iters)
+  
+  log_post <- log_posterior(init_params, y, init_bs, X, Z)
+  
+# Progress bar in console
+  pb <- txtProgressBar(min = 0, max = iters, style = 3)
+  
+  
+  # MCMC loop
+  for (k in seq_len(iters)) {
+    
+    
+    # "Non-random" parameters
+    theta_prop <- rnorm(length(init_params), mean = theta_vals[k, ], sd = tuners)
+    
+    
+    log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
+    
+    accept_prob <- exp(log_post_prop - log_post)
+    
+    if (accept_prob > runif(1)) {
+      
+      theta_vals[k+1, ] <- theta_prop
+      log_post <- log_post_prop
+      acceptance[k] <- TRUE
+      
+    } else {
+      
+      theta_vals[k+1, ] <- theta_vals[k, ]
+      acceptance[k] <- FALSE
+    }
+    
+    
+    # "Random" parameters (proposed/accepted separately)
+    
+    # Now hold other parameters steady
+    # Random effects have standard deviation exp(log_sigma_b)
+    b_prop <- rnorm(length(init_bs), mean = b_vals[k, ], sd = b_tuner)
+    
+    # Use (possibly newly accepted) values of theta
+    log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
+    
+    accept_prob_b <- exp(log_post_prop_b - log_post)
+    
+    if (accept_prob_b > runif(1)) {
+      
+      b_vals[k+1, ] <- b_prop
+      log_post <- log_post_prop_b
+      acceptance_b[k] <- TRUE
+      
+    } else {
+      
+      b_vals[k+1, ] <- b_vals[k, ]
+      acceptance_b[k] <- FALSE
+    }
+    
+    setTxtProgressBar(pb, value = k)
+  }
+  
+  
+  if (show_plot) {
+    
+    rows <- floor(sqrt(ncol(theta_vals)))
+    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
+    
+    lapply(names(init_params), function(nm) {
+      y <- theta_vals[, nm]
+      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
+    })
+    
+    par(mfrow = c(1, 1))
+  }
+  
+  close(pb)
+  cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
+  cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
+  cat(sprintf("Burned-in b acceptance: %2.3f%%\n", mean(acceptance_b[-(1:burnin)])*100))
+  
+  list(theta = theta_vals, b = b_vals)
+}
+
+
+
+mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, y, X, Z, show_plot = TRUE) {
+  
+  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  colnames(theta_vals) <- names(init_params)
+  theta_vals[1, ] <- init_params
+  
+  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
+  b_vals[1, ] <- init_bs
+  
+  acceptance <- rep(NA, iters)
+  
+  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
+  
+  # Propositions for all iterations
+  props <- MASS::mvrnorm(iters, mu = c(init_params, init_bs), Sigma = tuner^2 * cov_matrix)
+  
+  
+  # Progress bar in console
+  pb <- txtProgressBar(min = 0, max = iters, style = 3)
+  
+  
+  # MCMC loop
+  for (k in seq_len(iters)) {
+    
+    # Use proposed values for theta and b
+    theta_prop <- props[k, 1:length(init_params)]
+    b_prop <- props[k, (length(init_params)+1):ncol(props)]
+    
+    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
+    
+    accept_prob <- exp(log_post_prop - log_post)
+    
+    if (accept_prob > runif(1)) {
+      
+      theta_vals[k+1, ] <- theta_prop
+      b_vals[k+1, ] <- b_prop
+      log_post <- log_post_prop
+      acceptance[k] <- TRUE
+      
+    } else {
+      
+      theta_vals[k+1, ] <- theta_vals[k, ]
+      b_vals[k+1, ] <- b_vals[k, ]
+      acceptance[k] <- FALSE
+    }
+    
+    
+    setTxtProgressBar(pb, value = k)
+  }
+  
+  
+  if (show_plot) {
+    
+    rows <- floor(sqrt(ncol(theta_vals)))
+    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
+    
+    lapply(names(init_params), function(nm) {
+      y <- theta_vals[, nm]
+      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")
+    })
+    
+    par(mfrow = c(1, 1))
+  }
+  
+  close(pb)
+  cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
+  cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
+  
+  list(theta = theta_vals, b = b_vals)
+}
 ```
 
 
@@ -21,27 +189,30 @@ set.seed(356476786) #use set.seed for reproducability, seed number found through
 ```
 
 
-
-
-
-
-
 # Fatigue of Materials
 
 ```{r}
-fatigue<- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
+fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
 ```
 
-**Question 1**
+
+
+#### Question 1
   
   
   Need to use same code as Question 2 but without the gamma included
 
-**Question 2**
+
+
+#### Question 2
   
-  Carry out MLE optimisation as in part 1:
+Theoretically, rather than selecting $\gamma$ ourselves it is possible to include it in the optimisation. The only slight technicality is that we must transform $\gamma$ from its current bounded interval - specifically, $\gamma \in \left( 0, \min(s_i) \right)$ - onto an unbounded interval. This is achievable via the logit transformation, i.e. we optimise using
+$$\text{l_gamma} = \text{logit} \left( \frac{\gamma}{\min(s_i)} \right) = \log \left( \frac{\gamma}{\min(s_i) - \gamma} \right)$$
+
+The code from Question 1 can be adapted easily by replacing `gamma` with `min_s/(1 + exp(-l_gamma))` and by adding `l_gamma` to the list of parameters fow which we would like to return a gradient. Optimisation can then be performed as in Question 1.
+
   
-  ```{r}
+```{r p2q2_N_funcs, echo=FALSE}
 # Expressions for Weibull probability density function and Weibull survival function
 # l_gamma is logit (inverse sigmoid) transform of gamma, i.e.
 #  l_gamma = log(gamma / (min(fatigue$s) - gamma))
@@ -96,9 +267,9 @@ N_nll_gr <- function(theta, y, stress, runout) {
     runout * attr(N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma), "gradient")
   ))
 }
+```
 
-
-
+```{r p2q2_opt}
 # Initial params
 # Certain combinations seem to lead to strange (non-optimal) results...
 # e.g. c(1, 1, 1, 1)
@@ -113,11 +284,13 @@ N_opt <- optim(
   stress = fatigue$s,
   runout = fatigue$ro,
   method = "BFGS",
-  hessian = TRUE,
-  control = list(trace = 1, maxit = 1000)
+  hessian = TRUE
 )
+```
 
+We can then calculate confidence intervals for these parameters in exactly the same way as before, using the negative Hessian returned by the optimisation.
 
+```{r p2q2_std_err, echo=FALSE}
 # Calculate standard errors from inverse Hessian
 N_std_err <- sqrt(diag(solve(N_opt$hessian)))
 
@@ -129,13 +302,18 @@ round(data.frame(
   lower = N_opt$par - qnorm(0.975)*N_std_err,
   upper = N_opt$par + qnorm(0.975)*N_std_err
 ), 3)
+```
 
+The optimised value of $\gamma$ can be retrieved using the inverse-logit (sigmoid) transformation:
 
-# Recover gamma
+```{r p2q2_gamma}
+# Recover optimal gamma
 min(fatigue$s) / (1 + exp(-N_opt$par[4]))
 ```
 
-**Question 3**
+
+
+#### Question 3
   
   INSERT EXPLANATIONS HERE
 
@@ -157,11 +335,13 @@ ggplot(fatigue, aes(x = s)) +
   theme_bw() + theme(legend.position = c(0.8, 0.85), legend.background = element_rect(color = "black"))
 ```
 
-**Question 4**
+
+
+#### Question 4
   
   As in question 5 of part 1:
   
-  ```{r eval}
+```{r q4_mcmc, eval=FALSE}
 
 log_posterior <- function(theta, y, b, stress, runout) {
   
@@ -265,3 +445,75 @@ cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
 cred_ints
 ```
 
+
+
+
+
+```{r q4_intgrl, eval=FALSE}
+intgrl <- function(theta) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+
+  vapply(seq_len(nrow(fatigue)), function(k) {
+    integrate(
+      function(gamma) {
+        ((1-fatigue$ro[k]) * dweibull(fatigue$N[k],
+                                      shape = 1/exp(log_sigma),
+                                      scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
+           fatigue$ro[k] * pweibull(fatigue$N[k],
+                                    shape = 1/exp(log_sigma),
+                                    scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta),
+                                    lower.tail = FALSE)) *
+          dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
+      },
+      lower = 0, upper = fatigue$s[k]
+    )$value
+  }, FUN.VALUE = 0)
+
+}
+
+
+# Calculate log posterior again but now without any priors
+log_post_no_prior <- function(theta, y, b, stress, runout) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+
+  l_gamma <- log(b / (min(stress)-b))
+
+  # Log conditional density of y given b
+  lfy_b <- sum(
+    (1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+    runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+  )
+
+  # Log marginal density of b
+  lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
+
+  # Log joint density of y and b is the sum (joint density is product - y, b are independent)
+  lfy_b + lfb
+}
+
+
+# Create full proposal distribution with denominator included
+log_posterior <- function(theta, y, b, stress, runout) {
+  l_fn <- sum(log(intgrl(theta)))
+  l_fn_b_fb <- log_post_no_prior(theta, y, b, stress, runout)
+  l_fn_b_fb - l_fn
+}
+
+# MCMC again (still taking correlation into account) with full posterior
+adjusted_new <- mcmc_mh_cov(
+  50000, 1000,
+  drop(tail(pilot$theta, 1)),
+  drop(tail(pilot$b, 1)), cov_D, 0.25,
+  fatigue$N, fatigue$s, fatigue$ro
+)
+````
