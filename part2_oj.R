@@ -348,39 +348,36 @@ intgrl <- function(theta) {
 intgrl(c(18, -2, -1, 4, -2))
 
 
-#Calculate log posterior again but now without any priors
+# Calculate log posterior again but now without any priors
 
 log_post_no_prior <- function(theta, y, b, stress, runout) {
-  
+
   log_alpha <- theta[1]
   delta <- theta[2]
   log_sigma <- theta[3]
   mu_gamma <- theta[4]
   log_sigma_gamma <- theta[5]
-  
+
   l_gamma <- log(b / (min(stress)-b))
-  
+
   # Log conditional density of y given b
   lfy_b <- sum(
     (1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
     runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
   )
-  
+
   # Log marginal density of b
   lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
-  
+
   # Log joint density of y and b is the sum (joint density is product - y, b are independent)
-  lf <- lfy_b + lfb
-  
-  # Log-posterior is log-prior plus log-likelihood
-  lf 
-  
+  lfy_b + lfb
 }
 
-#Create full proposal distribution with denominator included 
-log_posterior <- function(theta, y, b, stress, runout){
-  l_fn = sum(log(intgrl(theta)))
-  l_fn_b_fb = log_post_no_prior(theta, y, b, stress, runout)
+
+# Create full proposal distribution with denominator included
+log_posterior <- function(theta, y, b, stress, runout) {
+  l_fn <- sum(log(intgrl(theta)))
+  l_fn_b_fb <- log_post_no_prior(theta, y, b, stress, runout)
   l_fn_b_fb - l_fn
 }
 
