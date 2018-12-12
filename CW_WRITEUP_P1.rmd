@@ -2,7 +2,7 @@
 title: 'MA40198: Applied Statistical Inference'
 author: '20965, 20949 and 20969'
 header-includes:
-- \usepackage{bm}
+#- \usepackage{bm}
 date: "23/11/2018"
 output: pdf_document
 ---
@@ -16,12 +16,12 @@ knitr::opts_chunk$set(cache = TRUE)
 install.packages("ggplot2")
 install.packages("psych")
 ```  
-  
+
 ```{r echo=FALSE}
-set.seed(356476786) #use set.seed for reproducability, seed number found through random number generation
+set.seed(743625723) #use set.seed for reproducability, seed number found through random number generation
 ```
 # Carcenogenesis Study On Rats
-  
+
 Load up the data and use a ggplot to see whether we expect any effect from treatment based on our data
 ```{r,echo}
 rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
@@ -31,7 +31,7 @@ ggplot(rats, aes(group = factor(rx), fill = factor(rx), x = time)) + geom_densit
 Initally it appears that treatment may be causing tumors to appear earlier in treated rats however it is hard to tell without further analysis.  
 
 **Question 1**
-  
+
 The Weibull distribution is a popular distribution for looking at survival analysis, so is a natural first step for anaysing our data. First we find expressions for the Weibull Probability density and the Weibull Survival functions:
 ```{r}
 weib_prob <- deriv(
@@ -91,7 +91,7 @@ MLE paramater values are: Beta0 = `r (weib_opt$par[1])`, Beta1 = `r weib_opt$par
 
 **Question 2**  
 Use the inverse hessian calculated with optim to find the standard errors for each parametr and then use the asymptitic normal distribution to find a 95% confidence interval for $\beta_1$:
-  
+
 ```{r}
 weib_std_err <- sqrt(diag(solve(weib_opt$hessian)))
 names(weib_std_err) <- c("beta0", "beta1", "log_sigma")
@@ -100,7 +100,7 @@ conf_beta1 <- weib_opt$par[2] + c(-1, 1)*qnorm(0.975)*weib_std_err[2]
 ```
 
 Hence the 95% asymptotic confidence interval for the treatment effect $\beta_1$ is `r conf_beta1`. This interval implies that $\beta_1$ is negative. The Weibull model is influenced by $\beta_1$ in terms of $\eta_i$. If the rat has recieved treatment then $\eta_1=\beta_0+\beta_1$ if the rat is not treated then $\eta_0=\beta_0$. Therefore if we take $\beta_1$ as negative then $\eta_i$ is lower for treated rats. Then the scale parameter in the Weibull distribution is also lower as scale = exp($\eta_i$) and the exponential is an increasing function. Using these MLE values, confidence interval values and the analytical mean of a weibull distribution we can work out the expected mean. 
-  
+
 ```{r echo=FALSE}
 weib_mean<-function(shape,scale){
   scale*gamma(1+1/shape)
@@ -115,15 +115,15 @@ mean_treated_confhigh<-unname(weib_mean(1/exp(weib_opt$par[3]),exp(weib_opt$par[
 We find that the expected mean time untill tumor appearnce in untreated rats is `r round(mean_untreated, digits = 1)` weeks and `r round(mean_treated_MLE,digits = 1)` (or between `r round(mean_treated_conflow,digits = 1)` and `r round(mean_treated_confhigh,digits = 1)` taking the confidence interval $\beta_1$ values) in treated rats. The difference of around 30 weeks strongly suggests that treated rats are devoloping tumours earlier than their untreated counterparts.
 
 **Question 3**  
-  
+
 We now repeat everything above but for a log-logistic distribution and its corresponding survival function. The log-logistic distribution is another popular option for survival analysis. First carry out the optimisation to find MLEs:
 
 ```{r}
 llog_prob <- deriv(
   expression(
     log((1/exp(log_sigma))/exp(beta0 + beta1*treated) * 
-    (t/exp(beta0 + beta1*treated))^((1/exp(log_sigma))-1) / 
-    (1 + (t/exp(beta0 + beta1*treated))^(1/exp(log_sigma)))^2)),
+          (t/exp(beta0 + beta1*treated))^((1/exp(log_sigma))-1) / 
+          (1 + (t/exp(beta0 + beta1*treated))^(1/exp(log_sigma)))^2)),
   namevec = c("beta0", "beta1", "log_sigma"),
   function.arg = c("t", "beta0", "beta1", "log_sigma", "treated"),
   hessian = TRUE
@@ -140,7 +140,7 @@ llog_nll <- function(theta, t, treated, status) {
   beta1 <- theta[2]
   log_sigma <- theta[3]
   -sum(status * llog_prob(t, beta0, beta1, log_sigma, treated),
-    (1-status) * llog_surv(t, beta0, beta1, log_sigma, treated))
+       (1-status) * llog_surv(t, beta0, beta1, log_sigma, treated))
 }
 # Gradient of negative log-likelihood
 llog_nll_gr <- function(theta, t, treated, status) {
@@ -148,8 +148,8 @@ llog_nll_gr <- function(theta, t, treated, status) {
   beta1 <- theta[2]
   log_sigma <- theta[3]
   -colSums(rbind
-    (status * attr(llog_prob(t, beta0, beta1, log_sigma, treated), "gradient"),
-    (1-status) * attr(llog_surv(t, beta0, beta1, log_sigma, treated), "gradient")))
+           (status * attr(llog_prob(t, beta0, beta1, log_sigma, treated), "gradient"),
+             (1-status) * attr(llog_surv(t, beta0, beta1, log_sigma, treated), "gradient")))
 }
 # Minimise negative log-likelihood
 llog_opt <- optim(par = theta0,fn = llog_nll,gr = llog_nll_gr,t = rats$time,
@@ -160,7 +160,7 @@ llog_opt <- optim(par = theta0,fn = llog_nll,gr = llog_nll_gr,t = rats$time,
 MLE paramater values are now: Beta0 = `r (llog_opt$par[1])`, Beta1 = `r llog_opt$par[2]` and Sigma = `r exp(llog_opt$par[3])` which are very similar to the values found in question 1.  
 
 The confidence interval for $\beta_1$ is calculated as in question 2:
-  
+
 ```{r}
 # Calculate standard errors from inverse Hessian
 llog_std_err <- sqrt(diag(solve(llog_opt$hessian)))
@@ -189,7 +189,7 @@ TO ADD: QQplots of data vs weib and data vs llog and see what happens to decide 
 **Question 4**  
 
 We now update the model to include the effect of rats being in different litters as random effects using a Weibull distribution. This accounts for any potential differences between litters, some litters may be predisposed to developing tumors earlier or later than others so adding in this random effect allows that to be accounted for. First we set up the model matricies:
-  
+
 ```{r}
 # Set up model matrices
 rats$litter <- factor(rats$litter)
@@ -228,27 +228,27 @@ lfyb <- function(theta, y, b, X, Z) {
   status <- y[, "status"]
   time <- y[, "time"]
   
-# Log conditional density of y given b
+  # Log conditional density of y given b
   lfy_b <- sum(status * weib_re_prob(time, eta, log_sigma),
-           (1-status) * weib_re_surv(time, eta, log_sigma))
-# Log marginal density of b
- lfb <- sum(dnorm(x = b, mean = 0, sd = exp(log_sigma_b), log = TRUE))
-# Log joint density of y and b is the sum (joint density is product - y, b are independent)
+               (1-status) * weib_re_surv(time, eta, log_sigma))
+  # Log marginal density of b
+  lfb <- sum(dnorm(x = b, mean = 0, sd = exp(log_sigma_b), log = TRUE))
+  # Log joint density of y and b is the sum (joint density is product - y, b are independent)
   lf <- lfy_b + lfb
   
-# Gradient of log-likelihood with respect to b
-# 2 terms: d(lfy_b)/db + d(lfb)/db
+  # Gradient of log-likelihood with respect to b
+  # 2 terms: d(lfy_b)/db + d(lfb)/db
   g <- t(Z) %*% (status*attr(weib_re_prob(time, eta, log_sigma), "gradient") + 
-                (1-status)*attr(weib_re_surv(time, eta, log_sigma), "gradient")) - 
-                 b/(exp(log_sigma_b)^2)
+                   (1-status)*attr(weib_re_surv(time, eta, log_sigma), "gradient")) - 
+    b/(exp(log_sigma_b)^2)
   
   # Hessian of log-likelihood wrt b i.e. dl/(db db^T)) will be diagonal since
   # taking derivative wrt bi then wrt bj where j!=i gives us 0
   # i.e. we can use "hessian" from weib_me_*()
   # So H_diag is the diagonal entries from the Hessian matrix (and all other entries are 0)
   H_diag <- t(Z) %*% (status*attr(weib_re_prob(time, eta, log_sigma), "hessian") + 
-                     (1-status)*attr(weib_re_surv(time, eta, log_sigma), "hessian")) - 
-                     1/(exp(log_sigma_b)^2)
+                        (1-status)*attr(weib_re_surv(time, eta, log_sigma), "hessian")) - 
+    1/(exp(log_sigma_b)^2)
   list(lf = lf, g = g, H_diag = H_diag)
 }
 ```
@@ -300,8 +300,8 @@ Now use optim to find the maximum likelihood estimate of this model with random 
 theta_init <- c("beta0" = 5,"beta1" = -1,"log_sigma" = -1,"log_sigma_b" = -2)
 
 rand_opt <- optim(theta_init,fn = lal,y = rats[, c("time", "status")],
-             X = model.matrix(~ 1 + rx, data = rats),Z = model.matrix(~ litter - 1, data = rats),
-             method = "BFGS",hessian = TRUE,control = list(trace = 1, maxit = 1000))
+                  X = model.matrix(~ 1 + rx, data = rats),Z = model.matrix(~ litter - 1, data = rats),
+                  method = "BFGS",hessian = TRUE,control = list(trace = 1, maxit = 1000))
 ```
 
 As before we use the hessian calculated in optim to find 95% confidence intervals for $\theta$ and specifically $\beta_1$:
@@ -311,292 +311,193 @@ As before we use the hessian calculated in optim to find 95% confidence interval
 rand_std_err <- sqrt(diag(solve(rand_opt$hessian)))
 # 95% confidence interval for beta1
 conf_beta1_rand <- rand_opt$par[2] + c(-1, 1)*qnorm(0.975)*rand_std_err[2]
-
 ```
 
+Hence the 95% asymptotic confidence interval for the treatment effect $\beta_1$ with random effects accounted for is `r conf_beta1_rand`. As you can see the confidence interval is much smaller when random effects are taken into account which implies that there are random effects present. The smaller confidence interval gives further evidence that the treatment is causing tumours to appear earlier in treated rats, i.e. it is carcenogenic. Whereas in questions 2 and 3 the top end of the confidence interval was very close to zero now it is lower and hence we can be fairly sure that, based on the observed data, this treatment is carcenogenic to rats. 
+
 **Question 5**
-  
-  Find the log posterion distribution to be used for MCMC
+
+We now use the same model as above, with random effects. We use a Bayesian estimation procedure to estimate unknown parameter values. First find the log of the posterior distribution to be used for MCMC. We use improper uniform priors for $\beta_0$, $\beta_1$ and $log(\sigma)$, and an exponential prior with rate 5 for $\sigma_b$. 
+
 ```{r}
 log_posterior <- function(theta, y, b, X, Z) {
-  
   beta <- theta[1:2]
   log_sigma <- theta[3]
   log_sigma_b <- theta[4]
-  
   eta <- X%*%beta + Z%*%b
-  
   time <- y[, "time"]
   status <- y[, "status"]
-  
   # Log conditional density of y given b
   lfy_b <- sum(
     status * weib_re_prob(time, eta, log_sigma),
-    (1-status) * weib_re_surv(time, eta, log_sigma)
-  )
-  
+    (1-status) * weib_re_surv(time, eta, log_sigma))
   # Log marginal density of b
   lfb <- sum(dnorm(x = b, mean = 0, sd = exp(log_sigma_b), log = TRUE))
-  
   # Log joint density of y and b is the sum (joint density is product - y, b are independent)
   lf <- lfy_b + lfb
-  
   # Define log-prior (sum of log-priors for all parameters - here, just for log_sigma_b)
   log_prior <- dexp(exp(log_sigma_b), rate = 5, log = TRUE)
-  
   # Log-posterior is log-prior plus log-likelihood
   lf + log_prior
-  
 }
-
-
-log_posterior(c(1, 1, 1, 1), rats[, c("time", "status")], rep(0.1, ncol(Z)), X, Z)
-
 ```
 
-Create a general function for applying the MCMC algorith
+Create a general function for applying the MCMC algorithm.
 ```{r}
 mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
-  
   theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
   colnames(theta_vals) <- names(init_params)
   theta_vals[1, ] <- init_params
-  
   b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
   b_vals[1, ] <- init_bs
-  
   acceptance <- rep(NA, iters)
   acceptance_b <- rep(NA, iters)
-  
   log_post <- log_posterior(init_params, y, init_bs, X, Z)
-  
-# Progress bar in console
-  pb <- txtProgressBar(min = 0, max = iters, style = 3)
-  
-  
   # MCMC loop
   for (k in seq_len(iters)) {
-    
-    
     # "Non-random" parameters
     theta_prop <- rnorm(length(init_params), mean = theta_vals[k, ], sd = tuners)
-    
-    
     log_post_prop <- log_posterior(theta_prop, y, b_vals[k, ], X, Z)
-    
     accept_prob <- exp(log_post_prop - log_post)
-    
     if (accept_prob > runif(1)) {
-      
       theta_vals[k+1, ] <- theta_prop
       log_post <- log_post_prop
       acceptance[k] <- TRUE
-      
     } else {
-      
       theta_vals[k+1, ] <- theta_vals[k, ]
-      acceptance[k] <- FALSE
-    }
-    
-    
+      acceptance[k] <- FALSE}
     # "Random" parameters (proposed/accepted separately)
-    
-    # Now hold other parameters steady
-    # Random effects have standard deviation exp(log_sigma_b)
     b_prop <- rnorm(length(init_bs), mean = b_vals[k, ], sd = b_tuner)
-    
     # Use (possibly newly accepted) values of theta
     log_post_prop_b <- log_posterior(theta_vals[k+1, ], y, b_prop, X, Z)
-    
     accept_prob_b <- exp(log_post_prop_b - log_post)
-    
     if (accept_prob_b > runif(1)) {
-      
       b_vals[k+1, ] <- b_prop
       log_post <- log_post_prop_b
-      acceptance_b[k] <- TRUE
-      
+      acceptance_b[k] <- TRUE 
     } else {
-      
       b_vals[k+1, ] <- b_vals[k, ]
-      acceptance_b[k] <- FALSE
-    }
-    
-    setTxtProgressBar(pb, value = k)
-  }
-  
-  
+      acceptance_b[k] <- FALSE }}
   if (show_plot) {
-    
     rows <- floor(sqrt(ncol(theta_vals)))
     par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
-    
     lapply(names(init_params), function(nm) {
       y <- theta_vals[, nm]
       plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
-      rect(0, min(y), burnin, max(y), density = 10, col = "red")
-    })
-    
-    par(mfrow = c(1, 1))
-  }
-  
-  close(pb)
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")})
+    par(mfrow = c(1, 1))}
   cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
   cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
   cat(sprintf("Burned-in b acceptance: %2.3f%%\n", mean(acceptance_b[-(1:burnin)])*100))
-  
-  list(theta = theta_vals, b = b_vals)
-}
-```
-And another that account for covariances and correlations?????
-```{r}
-
-mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, y, X, Z, show_plot = TRUE) {
-  
-  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
-  colnames(theta_vals) <- names(init_params)
-  theta_vals[1, ] <- init_params
-  
-  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
-  b_vals[1, ] <- init_bs
-  
-  acceptance <- rep(NA, iters)
-  
-  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
-  
-  # Propositions for all iterations
-  props <- MASS::mvrnorm(iters, mu = c(init_params, init_bs), Sigma = tuner^2 * cov_matrix)
-  
-  
-  # Progress bar in console
-  pb <- txtProgressBar(min = 0, max = iters, style = 3)
-  
-  
-  # MCMC loop
-  for (k in seq_len(iters)) {
-    
-    # Use proposed values for theta and b
-    theta_prop <- props[k, 1:length(init_params)]
-    b_prop <- props[k, (length(init_params)+1):ncol(props)]
-    
-    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
-    
-    accept_prob <- exp(log_post_prop - log_post)
-    
-    if (accept_prob > runif(1)) {
-      
-      theta_vals[k+1, ] <- theta_prop
-      b_vals[k+1, ] <- b_prop
-      log_post <- log_post_prop
-      acceptance[k] <- TRUE
-      
-    } else {
-      
-      theta_vals[k+1, ] <- theta_vals[k, ]
-      b_vals[k+1, ] <- b_vals[k, ]
-      acceptance[k] <- FALSE
-    }
-    
-    
-    setTxtProgressBar(pb, value = k)
-  }
-  
-  
-  if (show_plot) {
-    
-    rows <- floor(sqrt(ncol(theta_vals)))
-    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
-    
-    lapply(names(init_params), function(nm) {
-      y <- theta_vals[, nm]
-      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
-      rect(0, min(y), burnin, max(y), density = 10, col = "red")
-    })
-    
-    par(mfrow = c(1, 1))
-  }
-  
-  close(pb)
-  cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
-  cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
-  
-  list(theta = theta_vals, b = b_vals)
-}
+  list(theta = theta_vals, b = b_vals)}
 ```
 
-Run regular MCMC loop
+Run 100,000 iterations of MCMC using MLE results from part 4 as starting values, as we know these should already be reasonable parameter estimates. Tuning parameters are 0.1 for all parameters, and 0.03 for the random effects - these provide good acceptance probabilities. We have a burn-in period of 2000. 
+
 ```{r}
 iters <- 100000
 burnin <- 2000
 pilot <- mcmc_mh(
   iters, burnin,
-  c(beta0 = 4, beta1 = 0, log_sigma = 0, log_sigma_b = -1),
+  rand_opt$par,
   rep(0, 50), c(0.1, 0.1, 0.1, 0.1), 0.03,
-  rats[, c("time", "status")], X, Z
-)
+  rats[, c("time", "status")], X, Z)
+```
+Combine values for $\mathbf{\theta}$ and $\mathbf{b}$, and check for correlations between $\mathbf{\theta}$ using all values generated by MCMC excluding the burn-in period. 
+```{r}
+D <- cbind(pilot$theta, pilot$b)[-(1:burnin), ]
+cor(D)[, 1:ncol(pilot$theta)][1:4,]
+```
+Results show that there is significant correlation between parameters, e.g. correlation of -0.71 between $\beta_0$ and $\beta_1$. We now adapt our MCMC approach by attempting to account for the correlations. At each step, the proposed $\mathbf{\theta}$ and $\mathbf{b}$ are generated using a multivariate normal proposal distribution, with covariance matrix cov(D) (where D is the matrix of combined MCMC results for $\mathbf{\theta}$ and $\mathbf{b}$, minus the burn-in period), centred around the previous values of the MCMC run. We use the last values generated by the above MCMC algorithm as starting values in the new algorithm. 
+
+```{r}
+mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, y, X, Z, show_plot = TRUE) {
+  theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
+  colnames(theta_vals) <- names(init_params)
+  theta_vals[1, ] <- init_params
+  b_vals <- matrix(NA, nrow = iters+1, ncol = length(init_bs))
+  b_vals[1, ] <- init_bs
+  acceptance <- rep(NA, iters)
+  log_post <- log_posterior(init_params, y, b_vals[1, ], X, Z)
+  # Propositions for all iterations
+  props <- MASS::mvrnorm(iters, mu = c(init_params, init_bs), Sigma = tuner^2 * cov_matrix)
+  for (k in seq_len(iters)) {
+    theta_prop <- props[k, 1:length(init_params)]
+    b_prop <- props[k, (length(init_params)+1):ncol(props)]
+    log_post_prop <- log_posterior(theta_prop, y, b_prop, X, Z)
+    accept_prob <- exp(log_post_prop - log_post)
+    if (accept_prob > runif(1)) {
+      theta_vals[k+1, ] <- theta_prop
+      b_vals[k+1, ] <- b_prop
+      log_post <- log_post_prop
+      acceptance[k] <- TRUE
+    } else {
+      theta_vals[k+1, ] <- theta_vals[k, ]
+      b_vals[k+1, ] <- b_vals[k, ]
+      acceptance[k] <- FALSE} }
+  if (show_plot) {
+    rows <- floor(sqrt(ncol(theta_vals)))
+    par(mfrow = c(rows, rows+(ncol(theta_vals)%%2)))
+    lapply(names(init_params), function(nm) {
+      y <- theta_vals[, nm]
+      plot(y, type = "l", main = nm, xlab = "Iteration", ylab = nm)
+      rect(0, min(y), burnin, max(y), density = 10, col = "red")})
+    par(mfrow = c(1, 1))}
+  cat(sprintf("Total acceptance:       %2.3f%%\n", mean(acceptance)*100))
+  cat(sprintf("Burned-in acceptance:   %2.3f%%\n", mean(acceptance[-(1:burnin)])*100))
+  list(theta = theta_vals, b = b_vals)}
 ```
 
-Now accounting for correlation
+Running the algorithm, with 50,000 iterations and a burn-in period of 1000. The plots show good convergence to a stationary distribution due to them resembling white noise. 
+
 ```{r eval=TRUE}
-D <- cbind(pilot$theta, pilot$b)[-(1:burnin), ]
-psych::pairs.panels(tail(D, 5000)[, 1:ncol(pilot$theta)], pch = ".")
-
-
 cov_D <- cov(D)
-
 iters <- 50000
 burnin <- 1000
-
 adjusted <- mcmc_mh_cov(
   iters, burnin,
   drop(tail(pilot$theta, 1)),
   drop(tail(pilot$b, 1)),
   cov_D, 0.1,
-  rats[, c("time", "status")], X, Z
-)
+  rats[, c("time", "status")], X, Z)
+```
 
+Combining new values of $\mathbf{\theta}$ and $\mathbf{b}$, and checking their correlations and what their marginal densities look like. Marginal densities are shown on the diagonal, correlation plots between parameters to the left of the diagonal, and actual correlation values to the right. 
 
+```{r eval=TRUE}
 adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
 psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
 
+```
 
+We now run a Kolmogorov-Smirnov test on each of the parameters to provide evidence for the fact that we have converged to the stationary distribution. We first calculate the ACFs, and from there calculate the autocorrelation lengths (ACLs). We then take a sample of the parameter, taking every ACLth value so the sample can be assumed to be independent. We then calculate two further subsamples of this sample, and run the K-S test on these. The p-values are all above 0.05, so at the 5% significance level there is no evidence to suggest that the two subsamples have come from different distributions. We can therefore assume we have converged to the stationary distribution. We have suppressed warnings for the ks function as the warnings provided were stating that p-values were approximated rather than calculated exactly due to a large sample size, we deemed this to not be a problem.
+
+```{r eval=TRUE}
 par(mfrow = c(2, 2))
-
-ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
-  
+ks_pvals <- suppressWarnings({vapply(colnames(adjusted$theta), function(nm) {
   # Calculate autocorrelation in MH sample for parameter
   y <- adjusted$theta[-(1:burnin), nm]
   autocorr <- acf(y, main = nm)
-  
-  # Autocorrelation length
-  acl <- 2*sum(autocorr$acf) + 1
-  
+  acl <- 2*sum(autocorr$acf) + 1 # Autocorrelation length
   # Sample of acl-spaced observations
   ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
-  
   # Test whether two halves of this sample are from same distribution
   # If p-value is significant, this means samples are (likely) from same dist
   idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
   ks.test(ac_smp[idx], ac_smp[-idx])$p.value
-  
-}, FUN.VALUE = 0)
-
+}, FUN.VALUE = 0)})
 par(mfrow = c(1, 1))
-
-# p-values as just calculated
 ks_pvals
+```
 
+Calculate a 95% credible interval for $\beta_1$.
 
-
-# Credible intervals for each parameter
+```{r eval=TRUE}
 cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
-  
   y <- adjusted$theta[-(1:burnin), nm]
   quantile(y, c(0.025, 0.975))
-  
 }, FUN.VALUE = c(0, 0))
-
-cred_ints
+cred_ints[,2]
 ```
 
 
