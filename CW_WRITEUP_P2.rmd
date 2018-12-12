@@ -5,14 +5,24 @@ date: "23/11/2018"
 output: pdf_document
 ---
 
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache = FALSE)
-  
+# If this document is merged with part 1, we can remove this chunk
+
+
+
+
+knitr::opts_chunk$set(cache = TRUE)
+
+
+#install.packages("purrr")
+
 
 # We brought this in in part 1
 library(ggplot2)
 
 
+# These were also in part 1
 mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, Z, show_plot = TRUE) {
   
   theta_vals <- matrix(NA, nrow = iters+1, ncol = length(init_params))
@@ -181,10 +191,6 @@ mcmc_mh_cov <- function(iters, burnin, init_params, init_bs, cov_matrix, tuner, 
 ```
 
 
-```{r eval=FALSE}
-install.packages("ggplot2")
-install.packages("purrr")
-```  
 
 
 
