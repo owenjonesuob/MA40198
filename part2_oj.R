@@ -313,3 +313,36 @@ cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
 
 cred_ints
 
+
+
+
+
+
+
+
+
+
+
+intgrl <- function(theta) {
+
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+
+  vapply(seq_len(nrow(fatigue)), function(k) {
+    integrate(
+      function(gamma) {
+        ((1-fatigue$ro[k]) * dweibull(fatigue$N[k], shape = 1/exp(log_sigma), scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
+           fatigue$ro[k] * pweibull(fatigue$N[k], shape = 1/exp(log_sigma), scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta), lower.tail = FALSE)) *
+          dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
+      },
+      lower = 0, upper = fatigue$s[k]
+    )$value
+  }, FUN.VALUE = 0)
+
+}
+
+
+intgrl(c(18, -2, -1, 4, -2))
