@@ -460,7 +460,6 @@ mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner, y, X, 
     # "Random" parameters (proposed/accepted separately)
 
     # Now hold other parameters steady
-    # Random effects have standard deviation exp(log_sigma_b)
     b_prop <- rnorm(length(init_bs), mean = b_vals[k, ], sd = b_tuner)
 
     # Use (possibly newly accepted) values of theta
