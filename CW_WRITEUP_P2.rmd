@@ -290,7 +290,7 @@ N_opt_const_gamma <- optim(
 )
 ```
 
-This optimisation returns a set of optimised parameters, and note that we have asked `optim()` to return the Hessian matrix evaluated at these optimised values. In fact, since we have minimised the _negative_ log-likelihood, we have in fact been given the negative Hessian; inverting this yields an approximation to (asymptotic) covariance matrix, and therefore the standard errors for each parameter in $\mathbf{\theta}$ can be estimated by taking the square roots of the elements on the main diagonal. With these standard errors, we can calculate asymptotic 95% confidence intervals for each of the three parameters.
+Again, just as in Part 1, we can use the negative Hessian returned by `optim()` to calculate standard errors and hence 95% asymptotic confidence intervals for each parameter.
 
 ```{r p2q1_std_err}
 # Calculate standard errors from inverse Hessian
