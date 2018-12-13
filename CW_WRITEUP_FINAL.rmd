@@ -647,7 +647,7 @@ As a final step, we run a Kolmogorov-Smirnov test on a sample from each of the p
 We first calculate the autocorrelation values, and from there calculate the "autocorrelation length" (ACL), defined as the distance between two effectively-independent observations. We then take a sample of the parameter, taking every ACLth value, and thereby obtaining a sample which can be assumed to consist of independent observations. We then calculate two further subsamples of this sample, and run the K-S test on these. The `ks.test()` function in R warns us loudly that if ties are present in our data, it cannot calculate an exact p-value; we acknowledge this, but deem it not to be a problem due to our large sample size.
 
 ```{r p1q5_ks, fig.dim=c(6, 1.5), out.extra="", fig.cap="Autocorrelation of parameters"}
-par(mfrow = c(1, 4))
+par(mfrow = c(1, 4), mai = rep(0.4, 4))
 
 ks_pvals <- suppressWarnings({vapply(colnames(adjusted$theta), function(nm) {
     
@@ -791,7 +791,7 @@ round(data.frame(
 The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these paramaters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
 
 
-```{r p2q1_param_plots, echo=FALSE, fig.dim=c(6, 2), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
+```{r p2q1_param_plots, echo=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
 gammas <- seq(1, min(fatigue$s), by = 1)
 
 conf_ints <- purrr::map_dfr(gammas, function(g) {
@@ -934,7 +934,7 @@ Interestingly, this "optimal" $\gamma$ seems to lie just before the upward turn 
 
 Using the optimised parameters from the previous section, we can compute approximate 10% and 50% quantiles for the distribution of $N$ over the range of stress values used in the fatigue testing. These are shown, alongside the recorded observations, in Figure \ref{fig:p2q3_stress_plot}; note that all but one of our observations lie clearly above the 10% quantile.
 
-```{r p2q3_stress_plot, echo=FALSE, fig.height=1.5, out.extra = "", fig.cap="Quantiles of our approximated distribution of N"}
+```{r p2q3_stress_plot, echo=FALSE, fig.height=2, out.extra = "", fig.cap="Quantiles of our approximated distribution of N"}
 # Use parameters from previous optimisation
 alpha <- exp(N_opt$par[1])
 delta <- N_opt$par[2]
@@ -956,10 +956,11 @@ ggplot(fatigue, aes(x = s)) +
 
 ### Section 2.4: Modelling fatigue limit as a random effect
 
-Similar to P1Q5
+We now apply a Bayesian approach to the above random effects model, and again create a Bayesian MCMC sampling procedure based on the Metropolis-Hastings algorithm to estimate unknown parameter values.
 
-```{r p2q4_mcmc, eval=FALSE}
+We define the log of the posterior distribution to be used for MCMC in a similar way to Section 1.4, using improper uniform priors for $log(\alpha)$, $\delta$, $\log(\sigma)$ and $log(\mu_\gamma)$ and an exponential prior with rate 5 for $log(\sigma_\gamma)$. We assume all of the priors are independent. We then apply the Metropolis Hastings algorithm using independent normal proposal distributions for all parameters and random effects, centred around the previous accepted values. We use the same Metropolis Hastings algorithm from Section 1.5 here. 
 
+```{r p2q4_log_posterior, echo=FALSE}
 log_posterior <- function(theta, y, b, stress, runout) {
   
   log_alpha <- theta[1]
@@ -989,43 +990,49 @@ log_posterior <- function(theta, y, b, stress, runout) {
   lf + log_prior
   
 }
+```
 
 
-log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$ro)
-
-
-
+```{r p2q4_pilot_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC samples for the 4 fatigue parameters"}
+# Initial paramteers, selected empirically
+theta0 <- c(log_alpha = 18, delta = -2,
+            log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2)
 
 iters <- 100000
 burnin <- 2000
+
+# Initial gamma values based on optimal gamma from Section 2.2
 pilot <- mcmc_mh(
-  iters, burnin,
-  c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
-  rep(66, 26), rep(0.03, 5), 0.12,
-  fatigue$N, fatigue$s, fatigue$ro
+  iters, burnin, theta0, rep(66, 26), rep(0.03, 5), 0.05,
+  y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
 
+```
 
+From the trace plots alone (see Figure \ref{fig:p2q4_pilot_run}) it is clear that again there is significant correlation between parameters. Therefore we apply the same approach as in Section 1.5, whereby account for this correlation and run the alternate version of the Metropolis Hastings algorithm. Once again, we run 50000 iterations and define a short burn-in period of 1000 iterations to allow the chains (initialised at the final values from the pilot run) to fully stabilise. 
+
+```{r p2q4_adj_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="Fatigue parameter values obtained with covariance-adjusted MCMC sampling"}
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
-cov_D <- cov(D)
-
 
 adjusted <- mcmc_mh_cov(
-  50000, 1000,
-  drop(tail(pilot$theta, 1)),
-  drop(tail(pilot$b, 1)), cov_D, 0.2,
-  fatigue$N, fatigue$s, fatigue$ro
+  50000, 1000, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov(D), 0.2,
+  y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
+```
 
+Finding parameter marginal distributions and viewing correlations, as before:
 
-
+```{r p2q4_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
 adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
 psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+```
 
+We now again check convergence to the stationary distribution using a Kolmogorov-Smirnov test.
 
-par(mfrow = c(2, 3))
+```{r p2q4_ks_test, echo=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="Autocorrelation of fatigue parameters"}
+par(mfrow = c(1, 5), mai = c(0.4, 0.2, 0.4, 0.2))
 
-ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
+ks_pvals_f <- suppressWarnings({vapply(colnames(adjusted$theta), function(nm) {
   
   # Calculate autocorrelation in MH sample for parameter
   y <- adjusted$theta[-(1:burnin), nm]
@@ -1042,24 +1049,23 @@ ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
   idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
   ks.test(ac_smp[idx], ac_smp[-idx])$p.value
   
-}, FUN.VALUE = 0)
+}, FUN.VALUE = 0)})
 
 par(mfrow = c(1, 1))
+```
 
-# p-values as just calculated
-ks_pvals
+```{r p2q4_ks_p_vals}
+ks_pvals_f
+```
 
+All p-values of the K-S test are above 0.05, so at the 5% significance level there is no evidence to suggest that the two subsamples come from different distributions. Therefore there is no evidence to reject the claim that we have indeed converged to the stationary distribution.
+ 
+Satisfied with our sampling, we conclude by calculating 95% credible intervals for the parameters.
 
-
-# Credible intervals for each parameter
-cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
-  
-  y <- adjusted$theta[-(1:burnin), nm]
-  quantile(y, c(0.025, 0.975))
-  
+```{r p2q4_cred_ints}
+vapply(colnames(adjusted$theta), function(nm) {
+  quantile(adjusted$theta[-(1:burnin), nm], c(0.025, 0.975))
 }, FUN.VALUE = c(0, 0))
-
-cred_ints
 ```
 
 
@@ -1135,7 +1141,7 @@ log_posterior <- function(theta, y, b, stress, runout) {
 
 
 
-```{r p2q5_mcmc, eval=FALSE, fig.dim=c(6, 2), out.extra="", fig.cap="MCMC with our integral-approximated posterior"}
+```{r p2q5_mcmc, eval=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC with our integral-approximated posterior"}
 # MCMC again (still taking correlation into account) with full posterior
 adjusted_new <- mcmc_mh_cov(
   50000, 1000, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov_D, 0.25,

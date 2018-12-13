@@ -3,205 +3,206 @@
 
 We now apply a Bayesian approach to the above random effects model, and again  create a Bayesian MCMC sampling procedure based on the Metropolis-Hastings algorithm to estimate unknown parameter values.
 
-We define the log of the posterior distribution to be used for MCMC, using improper uniform priors for $log(\alpha)$, $\delta$, $\log(\sigma)$ and $log(\mu_\gamma)$ and an exponential prior with rate 5 for $log(\sigma_\gamma)$. We assume all of the priors are independent. We then apply the Metropolis Hastings algorithm using independent normal proposal distributions for all paramerters and random effects, centred around the previous accepted values. We use the same Metropolis Hastings algorithm from Section 1.5 here. 
+We define the log of the posterior distribution to be used for MCMC in a similar way to Section 1.4, using improper uniform priors for $log(\alpha)$, $\delta$, $\log(\sigma)$ and $log(\mu_\gamma)$ and an exponential prior with rate 5 for $log(\sigma_\gamma)$. We assume all of the priors are independent. We then apply the Metropolis Hastings algorithm using independent normal proposal distributions for all parameters and random effects, centred around the previous accepted values. We use the same Metropolis Hastings algorithm from Section 1.5 here. 
 
-```{r q4_mcmc, eval=TRUE}
-log_posterior <- function(theta, y, b, stress, runout) {
-
-log_alpha <- theta[1]
-delta <- theta[2]
-log_sigma <- theta[3]
-mu_gamma <- theta[4]
-log_sigma_gamma <- theta[5]
-
-l_gamma <- log(b / (min(stress)-b))
-
-# Log conditional density of y given b
-lfy_b <- sum(
-(1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
-runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
-)
-
-# Log marginal density of b
-lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
-
-# Log joint density of y and b is the sum (joint density is product - y, b are independent)
-lf <- lfy_b + lfb
-
-# Define log-prior (sum of log-priors for all parameters - here, just for log_sigma_b)
-log_prior <- dexp(exp(log_sigma_gamma), rate = 5, log = TRUE)
-
-# Log-posterior is log-prior plus log-likelihood
-lf + log_prior
-
+```{r p2q4_log_posterior_f, echo=FALSE}
+log_posterior_f <- function(theta, y, b, stress, runout) {
+  
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+  
+  l_gamma <- log(b / (min(stress)-b))
+  
+  # Log conditional density of y given b
+  lfy_b <- sum(
+    (1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+    runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+  )
+  
+  # Log marginal density of b
+  lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
+  
+  # Log joint density of y and b is the sum (joint density is product - y, b are independent)
+  lf <- lfy_b + lfb
+  
+  # Define log-prior (sum of log-priors for all parameters - here, just for log_sigma_b)
+  log_prior <- dexp(exp(log_sigma_gamma), rate = 5, log = TRUE)
+  
+  # Log-posterior is log-prior plus log-likelihood
+  lf + log_prior
+  
 }
+```
 
-log_posterior(c(1, 1, 1, 1, 1), fatigue$N, rep(0.1, 26), fatigue$s, fatigue$ro)
+
+```{r p2q4_pilot_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC samples for the 4 fatigue parameters"}
+# Initial paramteers, selected empirically
+theta0 <- c(log_alpha = 18, delta = -2,
+            log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2)
 
 iters <- 100000
 burnin <- 2000
+
+# Initial gamma values based on optimal gamma from Section 2.2
 pilot <- mcmc_mh(
-iters, burnin,
-c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
-rep(66, 26), rep(0.03, 5), 0.12,
-fatigue$N, fatigue$s, fatigue$ro
+  iters, burnin, theta0, rep(66, 26), rep(0.03, 5), 0.12,
+  y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
 
 ```
 
-From the trace plots alone it is clear that again there is significant correlation between parameters. Therefore we apply the same approach as in Section 1.5, and account for this correlation and run the alternate version of the Metropolis Hastings algorithm. We do a run of 50,000 iterations and have a burn-in period of 1000. 
+From the trace plots alone (see Figure \ref{fig:p2q4_pilot_run}) it is clear that again there is significant correlation between parameters. Therefore we apply the same approach as in Section 1.5, whereby account for this correlation and run the alternate version of the Metropolis Hastings algorithm. Once again, we run 50000 iterations and define a short burn-in period of 1000 iterations to allow the chains (initialised at the final values from the pilot run) to fully stabilise. 
 
-```{r eval=TRUE}
+```{r p2q4_adj_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="Fatigue parameter values obtained with covariance-adjusted MCMC sampling"}
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
-cov_D <- cov(D)
-
 
 adjusted <- mcmc_mh_cov(
-50000, 1000,
-drop(tail(pilot$theta, 1)),
-drop(tail(pilot$b, 1)), cov_D, 0.2,
-fatigue$N, fatigue$s, fatigue$ro
+  50000, 1000, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov(D), 0.2,
+  y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
-
-
 ```
 
 Finding parameter marginal distributions and viewing correlations, as before:
 
-```{r eval=TRUE}
-adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
-psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+```{r p2q4_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
+psych::pairs.panels(tail(adjusted$theta, 5000), pch = ".")
 ```
 
-We now again check convergence to the stationary distribution. All p-values of the K-S test are above 0.05 so at the 5% significance level there is no evidence to suggest that the two subsamples come from different distributions. Therefore there is no evidence to reject the claim that we have indeed converged to the stationary distribution. 
+We now again check convergence to the stationary distribution using a Kolmogorov-Smirnov test.
 
-```{r eval=TRUE}
+```{r p2q4_ks_test, echo=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="Autocorrelation of fatigue parameters"}
 par(mfrow = c(2, 3))
 
-ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
-
-# Calculate autocorrelation in MH sample for parameter
-y <- adjusted$theta[-(1:burnin), nm]
-autocorr <- acf(y, main = nm)
-
-# Autocorrelation length
-acl <- 2*sum(autocorr$acf) + 1
-
-# Sample of acl-spaced observations
-ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
-
-# Test whether two halves of this sample are from same distribution
-# If p-value is significant, this means samples are (likely) from same dist
-idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
-ks.test(ac_smp[idx], ac_smp[-idx])$p.value
-
+ks_pvals_f <- vapply(colnames(adjusted$theta), function(nm) {
+  
+  # Calculate autocorrelation in MH sample for parameter
+  y <- adjusted$theta[-(1:burnin), nm]
+  autocorr <- acf(y, main = nm)
+  
+  # Autocorrelation length
+  acl <- 2*sum(autocorr$acf) + 1
+  
+  # Sample of acl-spaced observations
+  ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
+  
+  # Test whether two halves of this sample are from same distribution
+  # If p-value is significant, this means samples are (likely) from same dist
+  idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
+  ks.test(ac_smp[idx], ac_smp[-idx])$p.value
+  
 }, FUN.VALUE = 0)
 
 par(mfrow = c(1, 1))
-
-# p-values as just calculated
-ks_pvals
 ```
 
+```{r p2q4_ks_p_vals}
+ks_pvals_f
+```
+
+All p-values of the K-S test are above 0.05, so at the 5% significance level there is no evidence to suggest that the two subsamples come from different distributions. Therefore there is no evidence to reject the claim that we have indeed converged to the stationary distribution.
+ 
 Satisfied with our sampling, we conclude by calculating 95% credible intervals for the parameters.
 
-```{r eval=TRUE}
-# Credible intervals for each parameter
-cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
-y <- adjusted$theta[-(1:burnin), nm]
-quantile(y, c(0.025, 0.975))
+```{r p2q4_cred_ints}
+vapply(colnames(adjusted$theta), function(nm) {
+  quantile(adjusted$theta[-(1:burnin), nm], c(0.025, 0.975))
 }, FUN.VALUE = c(0, 0))
-cred_ints
 ```
 
 ### Section 2.5: Numerical integration comparison 
 
-The above approach excluded the denominator of the posterior distribution, namely $f(\mathbf{n})$. We assume each  $n_i$ is independent, for $i=1,...,26$, and therefore we have:
-$f(\mathbf{n})$ = $\prod_{i=1}^{26} f(n_i)$ = $\prod_{i=1}^{26} \int_{0}^{s_i} f(n_i | \gamma_i)f(\gamma_i)d\gamma_i$
-The function intgrl calculates an approximation to the (intractable) integral for each $n_i$, given $\mathbf{\theta}^T = (log(\alpha), \delta, log(\sigma), \mu_\gamma, log(\sigma_\gamma))$.
+The above approach excluded the denominator of the posterior distribution, namely $f(\mathbf{n})$. We assume each $n_i$ is independent, for $i = 1,...,26$, and therefore we have:
+$$f(\mathbf{n}) = \prod_{i=1}^{26} f(n_i) = \prod_{i=1}^{26} \int_{0}^{s_i} f(n_i | \gamma_i)f(\gamma_i)d\gamma_i$$
 
-```{r q4_intgrl, eval=FALSE}
+The function `intgrl()` calculates an approximation to the (intractable) integral for each $n_i$, given $\mathbf{\theta}^\top = (\log(\alpha), \delta, \log(\sigma), \mu_\gamma, \log(\sigma_\gamma))$.
+
+```{r p2q5_intgrl, eval=FALSE}
 intgrl <- function(theta) {
-
-log_alpha <- theta[1]
-delta <- theta[2]
-log_sigma <- theta[3]
-mu_gamma <- theta[4]
-log_sigma_gamma <- theta[5]
-
-vapply(seq_len(nrow(fatigue)), function(k) {
-integrate(
-function(gamma) {
-((1-fatigue$ro[k]) * dweibull(fatigue$N[k],
-shape = 1/exp(log_sigma),
-scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
-fatigue$ro[k] * pweibull(fatigue$N[k],
-shape = 1/exp(log_sigma),
-scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta),
-lower.tail = FALSE)) *
-dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
-},
-lower = 0, upper = fatigue$s[k]
-)$value
-}, FUN.VALUE = 0)
-
+  
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+  
+  vapply(seq_len(nrow(fatigue)), function(k) {
+    integrate(
+      function(gamma) {
+        ((1-fatigue$ro[k]) * dweibull(fatigue$N[k],
+                                      shape = 1/exp(log_sigma),
+                                      scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
+           fatigue$ro[k] * pweibull(fatigue$N[k],
+                                    shape = 1/exp(log_sigma),
+                                    scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta),
+                                    lower.tail = FALSE)) *
+          dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
+      },
+      lower = 0, upper = fatigue$s[k]
+    )$value
+  }, FUN.VALUE = 0)
+  
 }
 ```
 
-We can now calculate an approximation to the full log posterior equation, utilising the above function. We use all improper uniform priors in this case. 
+We can now calculate an approximation to the full log posterior equation, utilising the above function. We use improper uniform priors for all parameters in this case (the auxiliary function `log_post_imp_priors()` calculates the log-likelihood assuming this).
 
-```{r eval=TRUE}
+```{r p2q5_imp_priors, echo=FALSE}
 # Calculate numerator of log posterior again but now without any priors
-log_post_no_prior <- function(theta, y, b, stress, runout) {
-
-log_alpha <- theta[1]
-delta <- theta[2]
-log_sigma <- theta[3]
-mu_gamma <- theta[4]
-log_sigma_gamma <- theta[5]
-
-l_gamma <- log(b / (min(stress)-b))
-
-# Log conditional density of y given b
-lfy_b <- sum(
-(1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
-runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
-)
-
-# Log marginal density of b
-lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
-
-# Log joint density of y and b is the sum (joint density is product - y, b are independent)
-lfy_b + lfb
-}
-
-
-# Create full log posterior distribution with denominator included
-log_posterior <- function(theta, y, b, stress, runout) {
-l_fn <- sum(log(intgrl(theta)))
-l_fn_b_fb <- log_post_no_prior(theta, y, b, stress, runout)
-l_fn_b_fb - l_fn
+log_post_imp_priors <- function(theta, y, b, stress, runout) {
+  
+  log_alpha <- theta[1]
+  delta <- theta[2]
+  log_sigma <- theta[3]
+  mu_gamma <- theta[4]
+  log_sigma_gamma <- theta[5]
+  
+  l_gamma <- log(b / (min(stress)-b))
+  
+  # Log conditional density of y given b
+  lfy_b <- sum(
+    (1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+    runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+  )
+  
+  # Log marginal density of b
+  lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
+  
+  # Log joint density of y and b is the sum
+  lfy_b + lfb
 }
 ```
 
-We now do an MCMC run using the above log posterior equation. We again plot the marginal densities and correlations, as well as the confidence intervals for each parameter, to compare with Section 2.4.
+```{r p2q5_log_posterior}
+# Create full log posterior distribution with Bayesian denominator included
+log_posterior <- function(theta, y, b, stress, runout) {
+  lf_int <- sum(log(intgrl(theta)))
+  lf <- log_post_imp_priors(theta, y, b, stress, runout)
+  lf - lf_int
+}
+```
 
-```{r eval=TRUE}
+We now do an MCMC run using the above `log_posterior()` function. We again plot the marginal densities and correlations and calculate 95% credible intervals for each parameter, to compare with Section 2.4.
+
+```{r p2q5_mcmc, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC sampling using full Bayesian posterior"}
 # MCMC again (still taking correlation into account) with full posterior
 adjusted_full_post <- mcmc_mh_cov(
-50000, 1000,
-drop(tail(pilot$theta, 1)),
-drop(tail(pilot$b, 1)), cov_D, 0.25,
-fatigue$N, fatigue$s, fatigue$ro
+  50000, 1000, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov_D, 0.25,
+  y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
+```
 
-adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
-psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+```{r p2q5_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
+psych::pairs.panels(tail(adjusted_full_post$theta, 5000), pch = ".")
+```
 
-cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
-y <- adjusted$theta[-(1:burnin), nm]
-quantile(y, c(0.025, 0.975))
+```{r p2q5_cred_ints}
+# 95% credible intervals
+vapply(colnames(adjusted_full_post$theta), function(nm) {
+  y <- adjusted$theta[-(1:burnin), nm]
+  quantile(y, c(0.025, 0.975))
 }, FUN.VALUE = c(0, 0))
-cred_ints
 ````
 
