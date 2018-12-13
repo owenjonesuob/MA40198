@@ -1,0 +1,457 @@
+# Part 2: Fatigue of Materials
+
+The data used in this section can be downloaded from the following location:
+
+```{r load_data}
+fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
+set.seed(35647663) # Set a random seed for reproducibility
+```
+
+
+### Section 2.1: Maximum likelihood estimation of distribution parameters
+
+In this section we investigate fatigue in material samples subjected to cyclic loading. Conceptually, this problem is very similar to the problem investigated in Part 1: that is, the Weibull distribution is at the heart of much of the following analysis, and observations are treated as censored or uncensored based on whether or not the fatigue-testing run was completed.
+
+We have assumed that $N_i$, the number of test cycles completed at stress level $s_i$ and with fatigue constant $\gamma$ for the $i$th observation, is given by
+$$N_i = \alpha (s_i - \gamma)^\delta \epsilon_i$$
+where
+$$\epsilon_i \sim \text{Weibull} \left( \text{shape} = 1/\sigma, \; \text{scale} = 1 \right)$$
+
+Immediately we can incorporate the rest of the formula for $N_i$ into the scale parameter of this distribution, obtaining that
+$$N_i \sim \text{Weibull} \left( \text{shape} = 1/\sigma, \; \text{scale} = \alpha (s_i - \gamma)^\delta \right)$$
+
+As in Part 1, we can now derive expressions for the negative log-likelihood and its gradient. Note that we reparameterise $\alpha$ and $\sigma$ using a log transform, since both of these parameters must always be greater than 0.
+
+```{r p2q1}
+# Expressions for Weibull distribution and survival function
+N_prob_const_gamma <- deriv(
+expression(
+-log_sigma - log_alpha - delta*log(s - gamma) +
+((1/exp(log_sigma)) - 1) * (log(y) - log_alpha - delta*log(s - gamma)) -
+(y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+),
+namevec = c("log_alpha", "delta", "log_sigma"),
+function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+hessian = TRUE
+)
+N_surv_const_gamma <- deriv(
+expression(
+-(y / (exp(log_alpha) * (s - gamma)^delta))^(1/exp(log_sigma))
+),
+namevec = c("log_alpha", "delta", "log_sigma"),
+function.arg = c("y", "s", "min_s", "gamma", "log_alpha", "delta", "log_sigma"),
+hessian = TRUE
+)
+# Negative log-likelihood
+N_nll_const_gamma <- function(theta, y, gamma, stress, runout) {
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+-sum(
+(1-runout) * N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma),
+runout * N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma)
+)
+}
+# Gradient of negative log-likelihood
+N_nll_gr_const_gamma <- function(theta, y, gamma, stress, runout) {
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+-colSums(rbind(
+(1-runout) * attr(N_prob_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient"),
+runout * attr(N_surv_const_gamma(y, stress, min(stress), gamma, log_alpha, delta, log_sigma), "gradient")
+))
+}
+```
+
+Having defined these functions, we can select a value for $\gamma$ and then optimise over $\mathbf{\theta}$.
+
+```{r p2q1_opt}
+# Initial params
+theta0 <- c("log_alpha" = 2, "delta" = 1, "log_sigma" = 2)
+gamma <- 70
+# Minimise negative log-likelihood
+N_opt_const_gamma <- optim(
+par = theta0,
+fn = N_nll_const_gamma,
+gr = N_nll_gr_const_gamma,
+y = fatigue$N,
+gamma = gamma,
+stress = fatigue$s,
+runout = fatigue$ro,
+method = "BFGS",
+hessian = TRUE
+)
+```
+
+Again, just as in Part 1, we can use the negative Hessian returned by `optim()` to calculate standard errors and hence 95% asymptotic confidence intervals for each parameter.
+
+```{r p2q1_std_err}
+# Calculate standard errors from inverse Hessian
+N_std_err_const_gamma <- sqrt(diag(solve(N_opt_const_gamma$hessian)))
+# 95% confidence interval for each parameter
+# Note asymptotic distribution of each is normal
+round(data.frame(
+val = N_opt_const_gamma$par,
+se = N_std_err_const_gamma,
+lower = N_opt_const_gamma$par - qnorm(0.975)*N_std_err_const_gamma,
+upper = N_opt_const_gamma$par + qnorm(0.975)*N_std_err_const_gamma
+), 3)
+```
+
+The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these paramaters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
+
+
+```{r p2q1_param_plots, echo=FALSE, fig.dim=c(6, 2), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
+gammas <- seq(1, min(fatigue$s), by = 1)
+conf_ints <- purrr::map_dfr(gammas, function(g) {
+opt <- optim(
+par = theta0,
+fn = N_nll_const_gamma,
+gr = N_nll_gr_const_gamma,
+y = fatigue$N,
+gamma = g,
+stress = fatigue$s,
+runout = fatigue$ro,
+method = "BFGS",
+hessian = TRUE
+)
+std_errs <- sqrt(diag(solve(opt$hessian)))
+data.frame(gamma = g, param = names(theta0), value = opt$par,
+lower = opt$par - qnorm(0.975)*std_errs,
+upper = opt$par + qnorm(0.975)*std_errs)
+})
+ggplot(conf_ints, aes(x = gamma, fill = param)) +
+geom_line(aes(y = value, color = param), lwd = 1) +
+geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+facet_wrap(~ param, scales = "free_y") +
+theme_bw() + guides(color = FALSE, fill = FALSE)
+```
+
+
+
+### Section 2.2: Estimation of fatigue limit
+
+Theoretically, rather than selecting $\gamma$ ourselves it is possible to include it in the optimisation. The only slight technicality is that we must transform $\gamma$ from its current bounded interval - specifically, $\gamma \in \left( 0, \min(s_i) \right)$ - onto an unbounded interval. This is achievable via the logit transformation, i.e. we optimise using
+$$\text{l\_gamma} = \text{logit} \left( \frac{\gamma}{\min(s_i)} \right) = \log \left( \frac{\gamma}{\min(s_i) - \gamma} \right)$$
+
+The code from Section 2.1 can be adapted easily by replacing `gamma` with `min_s/(1 + exp(-l_gamma))` and by adding `l_gamma` to the list of parameters for which we would like to return a gradient. Optimisation can then be performed as in Section 2.1.
+
+
+```{r p2q2_N_funcs, echo=FALSE}
+# Expressions for Weibull probability density function and Weibull survival function
+# l_gamma is logit (inverse sigmoid) transform of gamma, i.e.
+#  l_gamma = log(gamma / (min(fatigue$s) - gamma))
+N_prob <- deriv(
+expression(
+-log_sigma - log_alpha - delta*log(s - min_s/(1 + exp(-l_gamma))) +
+((1/exp(log_sigma)) - 1) * (log(y) - log_alpha - delta*log(s - min_s/(1 + exp(-l_gamma)))) -
+(y / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta))^(1/exp(log_sigma))
+),
+namevec = c("log_alpha", "delta", "log_sigma", "l_gamma"),
+function.arg = c("y", "s", "min_s", "log_alpha", "delta", "log_sigma", "l_gamma"),
+hessian = TRUE
+)
+N_surv <- deriv(
+expression(
+-(y / (exp(log_alpha) * (s - min_s/(1 + exp(-l_gamma)))^delta))^(1/exp(log_sigma))
+),
+namevec = c("log_alpha", "delta", "log_sigma", "l_gamma"),
+function.arg = c("y", "s", "min_s", "log_alpha", "delta", "log_sigma", "l_gamma"),
+hessian = TRUE
+)
+# Negative log-likelihood
+N_nll <- function(theta, y, stress, runout) {
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+l_gamma <- theta[4]
+-sum(
+(1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+)
+}
+# Gradient of negative log-likelihood
+N_nll_gr <- function(theta, y, stress, runout) {
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+l_gamma <- theta[4]
+-colSums(rbind(
+(1-runout) * attr(N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma), "gradient"),
+runout * attr(N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma), "gradient")
+))
+}
+```
+
+```{r p2q2_opt}
+# Initial params
+# Certain combinations seem to lead to strange (non-optimal) results...
+# e.g. c(1, 1, 1, 1)
+theta0 <- c("log_alpha" = 2, "delta" = 1, "log_sigma" = 2, "l_gamma" = 0)
+# Minimise negative log-likelihood
+N_opt <- optim(
+par = theta0,
+fn = N_nll,
+gr = N_nll_gr,
+y = fatigue$N,
+stress = fatigue$s,
+runout = fatigue$ro,
+method = "BFGS",
+hessian = TRUE
+)
+```
+
+We can then calculate confidence intervals for these parameters in exactly the same way as before, using the negative Hessian returned by the optimisation.
+
+```{r p2q2_std_err, echo=FALSE}
+# Calculate standard errors from inverse Hessian
+N_std_err <- sqrt(diag(solve(N_opt$hessian)))
+# 95% confidence interval for each parameter
+# Note asymptotic distribution is normal
+round(data.frame(
+val = N_opt$par,
+se = N_std_err,
+lower = N_opt$par - qnorm(0.975)*N_std_err,
+upper = N_opt$par + qnorm(0.975)*N_std_err
+), 3)
+```
+
+The optimised value of $\gamma$ can be retrieved using the inverse-logit (sigmoid) transformation:
+
+```{r p2q2_gamma}
+# Recover optimal gamma
+min(fatigue$s) / (1 + exp(-N_opt$par[4]))
+```
+
+Interestingly, this "optimal" $\gamma$ seems to lie just before the upward turn seen in Figure \ref{fig:p2q1_param_plots}, providing further evidence that the relationship between $\sigma$ and $\gamma$ is the most important factor contributing to the distribution of $N_i$.
+
+
+
+### Section 2.3: Important quantiles of approximated distribution
+
+Using the optimised parameters from the previous section, we can compute approximate 10% and 50% quantiles for the distribution of $N$ over the range of stress values used in the fatigue testing. These are shown, alongside the recorded observations, in Figure \ref{fig:p2q3_stress_plot}; note that all but one of our observations lie clearly above the 10% quantile.
+
+```{r p2q3_stress_plot, echo=FALSE, fig.height=3, out.extra = "", fig.cap="Quantiles of our approximated distribution of N"}
+# Use parameters from previous optimisation
+alpha <- exp(N_opt$par[1])
+delta <- N_opt$par[2]
+sigma <- exp(N_opt$par[3])
+gamma <- min(fatigue$s) / (1 + exp(-N_opt$par[4]))
+library(ggplot2)
+ggplot(fatigue, aes(x = s)) +
+geom_point(aes(y = N)) +
+stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.1, shape = 1, scale = 1)}, aes(color = "10% quantile")) +
+stat_function(fun = function(s) {alpha * (s - gamma)^delta * qweibull(0.5, shape = 1, scale = 1)}, aes(color = "50% quantile"), linetype = "dashed") +
+labs(x = "Stress", y = "N", color = "Estimated quantiles") +
+theme_bw() + theme(legend.position = c(0.85, 0.8), legend.background = element_rect(color = "black"), legend.title = element_blank())
+```
+
+
+
+
+### Section 2.4: Modelling fatigue limit as a random effect
+
+We now apply a Bayesian approach to the above random effects model, and again  create a Bayesian MCMC sampling procedure based on the Metropolis-Hastings algorithm to estimate unknown parameter values.
+
+We define the log of the posterior distribution to be used for MCMC, using improper uniform priors for $log(\alpha)$, $\delta$, $\log(\sigma)$ and $log(\mu_\gamma)$ and an exponential prior with rate 5 for $log(\sigma_\gamma)$. We assume all of the priors are independent. We then apply the Metropolis Hastings algorithm using independent normal proposal distributions for all paramerters and random effects, centred around the previous accepted values. We use the same Metropolis Hastings algorithm from Section 1.5 here. 
+
+```{r q4_mcmc, eval=TRUE}
+log_posterior <- function(theta, y, b, stress, runout) {
+
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+mu_gamma <- theta[4]
+log_sigma_gamma <- theta[5]
+
+l_gamma <- log(b / (min(stress)-b))
+
+# Log conditional density of y given b
+lfy_b <- sum(
+(1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+)
+
+# Log marginal density of b
+lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
+
+# Log joint density of y and b is the sum (joint density is product - y, b are independent)
+lf <- lfy_b + lfb
+
+# Define log-prior (sum of log-priors for all parameters - here, just for log_sigma_b)
+log_prior <- dexp(exp(log_sigma_gamma), rate = 5, log = TRUE)
+
+# Log-posterior is log-prior plus log-likelihood
+lf + log_prior
+
+}
+
+iters <- 100000
+burnin <- 2000
+pilot <- mcmc_mh(
+iters, burnin,
+c(log_alpha = 18, delta = -2, log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2),
+rep(66, 26), c(0.01,0.01,0.015,0.01,0.13), 0.25,
+fatigue$N, fatigue$s, fatigue$ro
+)
+
+```
+
+From the trace plots alone it is clear that again there is significant correlation between parameters. Therefore we apply the same approach as in Section 1.5, and account for this correlation and run the alternate version of the Metropolis Hastings algorithm. We do a run of 50,000 iterations and have a burn-in period of 1000. 
+
+```{r eval=TRUE}
+D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
+cov_D <- cov(D)
+
+
+adjusted <- mcmc_mh_cov(
+50000, 1000,
+drop(tail(pilot$theta, 1)),
+drop(tail(pilot$b, 1)), cov_D, 0.2,
+fatigue$N, fatigue$s, fatigue$ro
+)
+
+
+```
+
+Finding parameter marginal distributions and viewing correlations, as before:
+
+```{r eval=TRUE}
+adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
+psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+```
+
+We now again check convergence to the stationary distribution. All p-values of the K-S test are above 0.05 so at the 5% significance level there is no evidence to suggest that the two subsamples come from different distributions. Therefore there is no evidence to reject the claim that we have indeed converged to the stationary distribution. 
+
+```{r eval=TRUE}
+par(mfrow = c(2, 3))
+
+ks_pvals <- vapply(colnames(adjusted$theta), function(nm) {
+
+# Calculate autocorrelation in MH sample for parameter
+y <- adjusted$theta[-(1:burnin), nm]
+autocorr <- acf(y, main = nm)
+
+# Autocorrelation length
+acl <- 2*sum(autocorr$acf) + 1
+
+# Sample of acl-spaced observations
+ac_smp <- y[seq(from = 1, to = length(y), by = acl)]
+
+# Test whether two halves of this sample are from same distribution
+# If p-value is significant, this means samples are (likely) from same dist
+idx <- sample(1:length(ac_smp), ceiling(length(ac_smp)/2), replace = FALSE)
+ks.test(ac_smp[idx], ac_smp[-idx])$p.value
+
+}, FUN.VALUE = 0)
+
+par(mfrow = c(1, 1))
+
+# p-values as just calculated
+ks_pvals
+```
+
+Satisfied with our sampling, we conclude by calculating 95% credible intervals for the parameters.
+
+```{r eval=TRUE}
+# Credible intervals for each parameter
+cred_ints <- vapply(colnames(adjusted$theta), function(nm) {
+y <- adjusted$theta[-(1:burnin), nm]
+quantile(y, c(0.025, 0.975))
+}, FUN.VALUE = c(0, 0))
+cred_ints
+```
+
+### Section 2.5: Numerical integration comparison 
+
+The above approach excluded the denominator of the posterior distribution, namely $f(\mathbf{n})$. We assume each  $n_i$ is independent, for $i=1,...,26$, and therefore we have:
+$f(\mathbf{n})$ = $\prod_{i=1}^{26} f(n_i)$ = $\prod_{i=1}^{26} \int_{0}^{s_i} f(n_i | \gamma_i)f(\gamma_i)d\gamma_i$
+The function intgrl calculates an approximation to the (intractable) integral for each $n_i$, given $\mathbf{\theta}^T = (log(\alpha), \delta, log(\sigma), \mu_\gamma, log(\sigma_\gamma))$.
+
+```{r q4_intgrl, eval=FALSE}
+intgrl <- function(theta) {
+
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+mu_gamma <- theta[4]
+log_sigma_gamma <- theta[5]
+
+vapply(seq_len(nrow(fatigue)), function(k) {
+integrate(
+function(gamma) {
+((1-fatigue$ro[k]) * dweibull(fatigue$N[k],
+shape = 1/exp(log_sigma),
+scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
+fatigue$ro[k] * pweibull(fatigue$N[k],
+shape = 1/exp(log_sigma),
+scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta),
+lower.tail = FALSE)) *
+dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
+},
+lower = 0, upper = fatigue$s[k]
+)$value
+}, FUN.VALUE = 0)
+
+}
+```
+
+We can now calculate an approximation to the full log posterior equation, utilising the above function. We use all improper uniform priors in this case. 
+
+```{r eval=TRUE}
+# Calculate numerator of log posterior again but now without any priors
+log_post_no_prior <- function(theta, y, b, stress, runout) {
+
+log_alpha <- theta[1]
+delta <- theta[2]
+log_sigma <- theta[3]
+mu_gamma <- theta[4]
+log_sigma_gamma <- theta[5]
+
+l_gamma <- log(b / (min(stress)-b))
+
+# Log conditional density of y given b
+lfy_b <- sum(
+(1-runout) * N_prob(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma),
+runout * N_surv(y, stress, min(stress), log_alpha, delta, log_sigma, l_gamma)
+)
+
+# Log marginal density of b
+lfb <- sum(dweibull(x = b, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma), log = TRUE))
+
+# Log joint density of y and b is the sum (joint density is product - y, b are independent)
+lfy_b + lfb
+}
+
+
+# Create full log posterior distribution with denominator included
+log_posterior <- function(theta, y, b, stress, runout) {
+l_fn <- sum(log(intgrl(theta)))
+l_fn_b_fb <- log_post_no_prior(theta, y, b, stress, runout)
+l_fn_b_fb - l_fn
+}
+```
+
+We now do an MCMC run using the above log posterior equation. We again plot the marginal densities and correlations, as well as the confidence intervals for each parameter, to compare with Section 2.4. As expected, all results are very similar to Section 2.4.
+
+```{r eval=TRUE}
+# MCMC again (still taking correlation into account) with full posterior
+adjusted_full_post <- mcmc_mh_cov(
+50000, 1000,
+drop(tail(pilot$theta, 1)),
+drop(tail(pilot$b, 1)), cov_D, 0.25,
+fatigue$N, fatigue$s, fatigue$ro
+)
+
+adjD <- cbind(adjusted_full_post$theta, adjusted_full_post$b)[-(1:burnin), ]
+psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted_full_post$theta)], pch = ".")
+
+cred_ints <- vapply(colnames(adjusted_full_post$theta), function(nm) {
+y <- adjusted_full_post$theta[-(1:burnin), nm]
+quantile(y, c(0.025, 0.975))
+}, FUN.VALUE = c(0, 0))
+cred_ints
+
+````
+
