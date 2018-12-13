@@ -1,13 +1,16 @@
 ---
-title: 'MA40198: Applied Statistical Inference'
-author: '20965, 20949 and 20969'
+title: 'MA40198: Applied Statistical Inference Assessed Coursework 2018'
+author: 'Candidates 20965, 20949 and 20969'
 date: "13/12/2018"
 output: pdf_document
+geometry: [top=0.6in, left=0.6in, bottom=1in, right=0.6in]
+header-includes:
+  - \linespread{0.8}
 ---
 
 
 ```{r setup, echo=FALSE}
-knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(cache = TRUE, fig.align = "center")
 
 ```
 
@@ -501,7 +504,7 @@ mcmc_mh <- function(iters, burnin, init_params, init_bs, tuners, b_tuner,
 
 With this function defined, we can easily run 100000 iterations of MCMC. We use the MLE parameter values from Section 1.4 as starting values since we know these should already be reasonable parameter estimates. Tuning parameters are 0.1 for all parameters, and 0.03 for the random effects (which are initialised at 0) - empirically, these provide good acceptance probabilities for both sets of parameters. We also define a burn-in period of 2000 iterations, which allows the MCMC chains to reach the regions where they produce good random samples.
 
-```{r p1q5_pilot_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="Samples from Metropolis-Hastings MCMC"}
+```{r p1q5_pilot_run, fig.dim=c(7, 1), out.extra="", fig.cap="Samples from Metropolis-Hastings MCMC"}
 iters <- 100000
 burnin <- 2000
 
@@ -619,14 +622,14 @@ Note that the single tuning parameter now controls all our proposed values simul
 
 Running this new sampler over 50000 iterations and a smaller burn-in period of 1000 (reflecting our greater confidence in our starting values), the plots show good convergence to a stationary distribution, visible as the resemblance of the sampled values to white noise.
 
-```{r p1q5_adj_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="Samples from correlation-adjusted MCMC"}
+```{r p1q5_adj_run, fig.dim=c(7, 1), out.extra="", fig.cap="Samples from correlation-adjusted MCMC"}
 D <- cbind(pilot$theta, pilot$b)[-(1:burnin), ]
 
 iters <- 50000
 burnin <- 1000
 
 adjusted <- mcmc_mh_cov(
-  iters, burnin, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov(D), 0.1,
+  iters, burnin, drop(tail(pilot$theta, 1)), drop(tail(pilot$b, 1)), cov(D), 0.07,
   y = rats[, c("time", "status")],
   X = model.matrix(~ 1 + rx, data = rats),
   Z = model.matrix(~ litter - 1, data = rats)
@@ -635,7 +638,7 @@ adjusted <- mcmc_mh_cov(
 
 Combining the newly obtained values of $\mathbf{\theta}$ and $\mathbf{b}$, we check their correlations and the appearance of their marginal densities. In Figure \ref{fig:p1q5_adj_cor}, marginal densities are shown on the diagonal, correlation plots between parameters to the left of the diagonal, and calculated correlation values to the right.
 
-```{r p1q5_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between parameters"}
+```{r p1q5_adj_cor, echo=FALSE, fig.dim=c(7, 3), out.extra="", fig.cap="Correlation between parameters"}
 psych::pairs.panels(tail(adjusted$theta, 5000), pch = ".")
 ```
 
@@ -645,7 +648,7 @@ As a final step, we run a Kolmogorov-Smirnov test on a sample from each of the p
 
 We first calculate the autocorrelation values, and from there calculate the "autocorrelation length" (ACL), defined as the distance between two effectively-independent observations. We then take a sample of the parameter, taking every ACLth value, and thereby obtaining a sample which can be assumed to consist of independent observations. We then calculate two further subsamples of this sample, and run the K-S test on these. The `ks.test()` function in R warns us loudly that if ties are present in our data, it cannot calculate an exact p-value; we acknowledge this, but deem it not to be a problem due to our large sample size.
 
-```{r p1q5_ks, fig.dim=c(6, 1.5), out.extra="", fig.cap="Autocorrelation of parameters"}
+```{r p1q5_ks, fig.dim=c(7, 1.5), out.extra="", fig.cap="Autocorrelation of parameters"}
 par(mfrow = c(1, 4), mai = rep(0.4, 4))
 
 ks_pvals <- suppressWarnings({vapply(colnames(adjusted$theta), function(nm) {
@@ -676,9 +679,9 @@ Satisfied with our sampling, we conclude by calculating a 95% credible interval 
 quantile(adjusted$theta[-(1:burnin), "beta1"], c(0.025, 0.975))
 ```
 
-#### Carcenogenisis Study on Rats Conclusion
+#### Carcinogenesis Study on Rats: Conclusion
 
-We have used mutliple determenistic models, included random effects and carried out a Bayesian estimation procedure to analyse whether there is any evidence that this drug is carcenogenic to rats. All our models point towards a lower $\beta_1$ value in treated rats and based on our models this would imply that the use of this drug is causing earlier tumor appearance in treated rats and hence is carcenogenic.
+We have used mutliple determenistic models, included random effects and carried out a Bayesian estimation procedure to analyse whether there is any evidence that the drug in question is carcinogenic to rats. All our models point towards a lower $\beta_1$ value in treated rats, and based on our models this would imply that the use of this drug is causing earlier tumour appearance in treated rats and hence is carcinogenic.
 
 
 
@@ -790,7 +793,7 @@ round(data.frame(
 The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these paramaters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
 
 
-```{r p2q1_param_plots, echo=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
+```{r p2q1_param_plots, echo=FALSE, fig.dim=c(7, 2), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
 gammas <- seq(1, min(fatigue$s), by = 1)
 
 conf_ints <- purrr::map_dfr(gammas, function(g) {
@@ -992,7 +995,7 @@ log_posterior <- function(theta, y, b, stress, runout) {
 ```
 
 
-```{r p2q4_pilot_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC samples for the 4 fatigue parameters"}
+```{r p2q4_pilot_run, fig.dim=c(7, 1), out.extra="", fig.cap="MCMC samples for the 5 fatigue parameters"}
 # Initial paramteers, selected empirically
 theta0 <- c(log_alpha = 18, delta = -2, log_sigma = -1,
             mu_gamma = 4, log_sigma_gamma = -2)
@@ -1010,7 +1013,7 @@ pilot <- mcmc_mh(
 
 From the trace plots alone (see Figure \ref{fig:p2q4_pilot_run}) it is clear that again there is significant correlation between parameters. Therefore we apply the same approach as in Section 1.5, whereby account for this correlation and run the alternate version of the Metropolis Hastings algorithm. Once again, we run 50000 iterations and define a short burn-in period of 1000 iterations to allow the chains (initialised at the final values from the pilot run) to fully stabilise. 
 
-```{r p2q4_adj_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="Fatigue parameter values obtained with covariance-adjusted MCMC sampling"}
+```{r p2q4_adj_run, fig.dim=c(7, 1), out.extra="", fig.cap="Fatigue parameter values obtained with covariance-adjusted MCMC sampling"}
 D <- cbind(pilot$theta, pilot$b)[(burnin+1):iters, ]
 
 adjusted <- mcmc_mh_cov(
@@ -1021,13 +1024,13 @@ adjusted <- mcmc_mh_cov(
 
 Finding parameter marginal distributions and viewing correlations, as before:
 
-```{r p2q4_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
+```{r p2q4_adj_cor, echo=FALSE, fig.dim=c(7, 3), out.extra="", fig.cap="Correlation between fatigue parameters"}
 psych::pairs.panels(tail(adjusted$theta, 5000), pch = ".")
 ```
 
 We now again check convergence to the stationary distribution using a Kolmogorov-Smirnov test.
 
-```{r p2q4_ks_test, echo=FALSE, fig.dim=c(6, 1.5), out.extra="", fig.cap="Autocorrelation of fatigue parameters"}
+```{r p2q4_ks_test, echo=FALSE, fig.dim=c(7, 1.5), out.extra="", fig.cap="Autocorrelation of fatigue parameters"}
 par(mfrow = c(1, 5), mai = c(0.4, 0.2, 0.4, 0.2))
 
 ks_pvals_f <- suppressWarnings({vapply(colnames(adjusted$theta), function(nm) {
@@ -1139,9 +1142,9 @@ log_posterior <- function(theta, y, b, stress, runout) {
 }
 ```
 
-We now do an MCMC run using the above `log_posterior()` function. We again plot the marginal densities and correlations and calculate 95% credible intervals for each parameter, to compare with Section 2.4.
+We now do an MCMC run using the above `log_posterior()` function and calculate 95% credible intervals for each parameter, to compare with Section 2.4.
 
-```{r p2q5_mcmc, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC sampling using full Bayesian posterior"}
+```{r p2q5_mcmc, fig.dim=c(7, 1), out.extra="", fig.cap="MCMC sampling using full Bayesian posterior"}
 # MCMC again (still taking correlation into account) with full posterior
 D <- cbind(pilot$theta, pilot$b)[-(1:burnin), ]
 
@@ -1151,9 +1154,6 @@ adjusted_full_post <- mcmc_mh_cov(
 )
 ```
 
-```{r p2q5_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
-psych::pairs.panels(tail(adjusted_full_post$theta, 5000), pch = ".")
-```
 
 ```{r p2q5_cred_ints}
 # 95% credible intervals
@@ -1163,3 +1163,10 @@ vapply(colnames(adjusted_full_post$theta), function(nm) {
 }, FUN.VALUE = c(0, 0))
 ````
 
+As expected, these results are very similar to the results in Section 2.4. In both cases, we expect to obtain the same acceptance probabilities, since the $\log(f(\mathbf{n}))$ terms used in the full log posterior in Section 2.5 cancel out: we get an addition and a subtraction in the acceptance probability calculation.
+$$\begin{aligned}
+\log(\text{posterior}_\text{prop}) - \log(\text{posterior}_\text{old}) &= \log(f(n|\gamma_\text{prop})) + \log(\gamma_\text{prop}) + \log(f(n)) - \log(f(n|\gamma_\text{old})) - \log(\gamma_\text{old}) - \log(f(n))) \\
+&= \log(f(n|\gamma_\text{prop})) + \log(\gamma_\text{prop}) - \log(f(n|\gamma_\text{old})) - \log(\gamma_\text{old})
+\end{aligned}$$
+
+This final line is what is used in Section 2.4. In reality, when implemented the two calculations are not exactly the same due to floating point differences.
