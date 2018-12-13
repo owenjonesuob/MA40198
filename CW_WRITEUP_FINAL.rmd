@@ -5,8 +5,10 @@ date: "13/12/2018"
 output: pdf_document
 ---
 
+
 ```{r setup}
 knitr::opts_chunk$set(cache = TRUE)
+
 ```
 
 
@@ -32,6 +34,7 @@ set.seed(743625723) # Set a random seed for reproducibility
 Our task here is to model the effect of a drug administered during a clinical trial. Specifically, we are interested in the time until tumour appearance in rats, where some of these rats had received a treatment of the drug. In essence, this is a survival analysis task, and in such cases the Weibull distribution is a common choice on which to base initial models.
 
 However, before attempting to produce any models it is always sensible to examine the data for any obvious patterns. We do not have space in this report to include a detailed exploratory analysis, but we can consider simple density plots of the uncensored observations, separated by whether or not treatment was received (see Figure \ref{fig:p1q1_density_plot}). Note that the distribution of the "treated" observations is possibly skewed slightly further to the left than the "untreated" distribution (i.e. tumour appearance tends to be sooner in treated observations); but given the small sample size, this could just as easily be explained by natural variance in the data as it could by any potential effect of the treatment.
+
 
 ```{r p1q1_density_plot, echo=FALSE, fig.height=2, out.extra="", fig.cap="Density plots for uncensored observations"}
 library(ggplot2)
@@ -152,9 +155,9 @@ This interval provides strong evidence that $\beta_1$ is negative, so let us tak
 
 The Weibull model is influenced by $\beta_1$ in terms of $\eta_i$: if the $i$th rat has recieved treatment, then $\eta_i=\beta_0+\beta_1$, otherwise $\eta_i=\beta_0$. Therefore if $\beta_1$ is negative, then $\eta_i$ is lower for treated rats. Then the scale parameter in the Weibull distribution is also smaller, since we have used $\text{scale} = \exp(\eta_i)$ and the exponential is an increasing function.
 
-The analytical mean of a Weibull distribution with shape $a$ and scale $b$ can be calculated as $b \Gamma(1 + 1/a)$, where $\Gamma$ is the Gamma function. Hence using our MLE parameters, we can calculate estimates for the expected means of the treated and untreated observations.
+The analytical mean of a Weibull distribution with shape $a$ and scale $b$ can be calculated as $b \Gamma(1 + 1/a)$, where $\Gamma$ is the Gamma function. Hence using our MLE parameters, we can calculate estimates for the expected means of the treated and untreated observations. Code for this is included in the accompanying R Markdown file. Values for the means with different status' and $\beta_1$ values are as follows:
 
-```{r p1q2_weib_mean}
+```{r echo=FALSE, p1q2_weib_mean}
 weib_mean <- function(shape, scale) {
   scale*gamma(1 + 1/shape)
 }
@@ -166,6 +169,7 @@ weib_mean(
                                         "untreated" = 0))
 )
 ```
+
 
 Notice that there is a difference of around 30 weeks in tumour appearance between the estimated means of the two groups - in fact, the estimated mean for the untreated population lies well outside the estimated 95% confidence interval for the mean of the treated population. This provides very strong evidence in favour of the hypothesis we tentatively proposed after our quick initial inspection of the data; that is, it suggests that rats which had received treatment developed tumours earlier than their untreated counterparts.
 
@@ -398,7 +402,7 @@ re_beta1_ci <- re_opt$par["beta1"] +
 re_beta1_ci
 ```
 
-Compare this confidence interval with the one calculated in Section 1.2: the confidence interval is virtually identical (perhaps marginally tighter) when random effects are taken into account. Therefore although inclusion of random effects in our model has not significantly improved our parameter estimates, this has shown that the effect of treatment seems to be independent of litter.
+Compare this confidence interval with the one calculated in Section 1.2: the confidence interval is significantly tighter when random effects are taken into account. Therefore the inclusion of random effects in our model has improved our parameter estimates and shows increasing evidence that the use of this treatment is causing earlier tumor appearance in treated rats. Additionally we can infer that the litter does indeed have an effect on the time it takes for tumours to appear in rats.
 
 
 
@@ -672,6 +676,10 @@ Satisfied with our sampling, we conclude by calculating a 95% credible interval 
 ```{r p1q5_cred_int}
 quantile(adjusted$theta[-(1:burnin), "beta1"], c(0.025, 0.975))
 ```
+
+#### Carcenogenisis Study on Rats Conclusion
+
+We have used mutliple determenistic models, included random effects and carried out a Bayesian estimation procedure to analyse whether there is any evidence that this drug is carcenogenic to rats. All our models point towards a lower $\beta_1$ value in treated rats and based on our models this would imply that the use of this drug is causing earlier tumor appearance in treated rats and hence is carcenogenic.
 
 
 
