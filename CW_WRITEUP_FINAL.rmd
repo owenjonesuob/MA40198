@@ -6,15 +6,11 @@ output: pdf_document
 ---
 
 
-```{r setup}
+```{r setup, echo=FALSE}
 knitr::opts_chunk$set(cache = TRUE)
 
 ```
 
-
-```{r pkgs, eval=FALSE}
-install.packages(c("ggplot2", "psych", "purrr"))
-```  
 
 # Part 1: Carcinogenesis Study On Rats
 
@@ -27,7 +23,11 @@ rats$litter <- as.factor(rats$litter)
 set.seed(743625723) # Set a random seed for reproducibility
 ```
 
+The following packages are used to produce certain plots in this document.
 
+```{r pkgs, eval=FALSE}
+install.packages(c("ggplot2", "psych", "purrr"))
+``` 
 
 ### Section 1.1: Maximum likelihood estimation of distribution parameters
 
@@ -636,8 +636,7 @@ adjusted <- mcmc_mh_cov(
 Combining the newly obtained values of $\mathbf{\theta}$ and $\mathbf{b}$, we check their correlations and the appearance of their marginal densities. In Figure \ref{fig:p1q5_adj_cor}, marginal densities are shown on the diagonal, correlation plots between parameters to the left of the diagonal, and calculated correlation values to the right.
 
 ```{r p1q5_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between parameters"}
-adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
-psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+psych::pairs.panels(tail(adjusted$theta, 5000), pch = ".")
 ```
 
 Note that some of these parameters are still correlated. This is not something we have changed (indeed, it is not something we are _able_ to change); but we have now accounted for this correlation in our sampling.
@@ -691,7 +690,7 @@ The data used in this section can be downloaded from the following location:
 
 ```{r load_data}
 fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
-set.seed(356476786) # Set a random seed for reproducibility
+set.seed(35647663) # Set a random seed for reproducibility
 ```
 
 
@@ -995,15 +994,15 @@ log_posterior <- function(theta, y, b, stress, runout) {
 
 ```{r p2q4_pilot_run, fig.dim=c(6, 1.5), out.extra="", fig.cap="MCMC samples for the 4 fatigue parameters"}
 # Initial paramteers, selected empirically
-theta0 <- c(log_alpha = 18, delta = -2,
-            log_sigma = -1, mu_gamma = 4, log_sigma_gamma = -2)
+theta0 <- c(log_alpha = 18, delta = -2, log_sigma = -1,
+            mu_gamma = 4, log_sigma_gamma = -2)
 
 iters <- 100000
 burnin <- 2000
 
 # Initial gamma values based on optimal gamma from Section 2.2
 pilot <- mcmc_mh(
-  iters, burnin, theta0, rep(66, 26), rep(0.03, 5), 0.05,
+  iters, burnin, theta0, rep(66, 26), c(0.01, 0.01, 0.015, 0.01, 0.13), 0.25,
   y = fatigue$N, X = fatigue$s, Z = fatigue$ro
 )
 
@@ -1023,8 +1022,7 @@ adjusted <- mcmc_mh_cov(
 Finding parameter marginal distributions and viewing correlations, as before:
 
 ```{r p2q4_adj_cor, echo=FALSE, fig.dim=c(6, 3.5), out.extra="", fig.cap="Correlation between fatigue parameters"}
-adjD <- cbind(adjusted$theta, adjusted$b)[-(1:burnin), ]
-psych::pairs.panels(tail(adjD, 5000)[, 1:ncol(adjusted$theta)], pch = ".")
+psych::pairs.panels(tail(adjusted$theta, 5000), pch = ".")
 ```
 
 We now again check convergence to the stationary distribution using a Kolmogorov-Smirnov test.
@@ -1089,19 +1087,18 @@ intgrl <- function(theta) {
   vapply(seq_len(nrow(fatigue)), function(k) {
     integrate(
       function(gamma) {
-        ((1-fatigue$ro[k]) * dweibull(fatigue$N[k],
-                                      shape = 1/exp(log_sigma),
-                                      scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)) +
-           fatigue$ro[k] * pweibull(fatigue$N[k],
-                                    shape = 1/exp(log_sigma),
-                                    scale = (exp(log_alpha)*(fatigue$s[k] - gamma)^delta),
+        
+        shape <- 1/exp(log_sigma)
+        scale <- (exp(log_alpha)*(fatigue$s[k] - gamma)^delta)
+        
+        ((1-fatigue$ro[k]) * dweibull(fatigue$N[k], shape = shape, scale = scale) +
+           fatigue$ro[k] * pweibull(fatigue$N[k], shape = shape, scale = scale,
                                     lower.tail = FALSE)) *
           dweibull(gamma, shape = 1/exp(log_sigma_gamma), scale = exp(mu_gamma))
       },
       lower = 0, upper = fatigue$s[k]
     )$value
   }, FUN.VALUE = 0)
-  
 }
 ```
 
