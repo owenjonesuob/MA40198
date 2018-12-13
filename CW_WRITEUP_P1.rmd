@@ -13,26 +13,53 @@ knitr::opts_chunk$set(cache = TRUE)
 
 
 ```{r eval=FALSE}
-install.packages("ggplot2")
-install.packages("psych")
+install.packages(c("ggplot2", "psych", "purrr"))
 ```  
 
-```{r echo=FALSE}
-set.seed(743625723) #use set.seed for reproducability, seed number found through random number generation
+# Part 1: Carcinogenesis Study On Rats
+
+The data used in this section can be downloaded from the following location:
+
+```{r load_data}
+rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
+set.seed(743625723) # Set a random seed for reproducibility
 ```
-# Carcenogenesis Study On Rats
+
+
+
 
 Load up the data and use a ggplot to see whether we expect any effect from treatment based on our data
-```{r,echo}
-rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
-library(ggplot2)
-ggplot(rats, aes(group = factor(rx), fill = factor(rx), x = time)) + geom_density(alpha = 0.3)
-```
+
+
 Initally it appears that treatment may be causing tumors to appear earlier in treated rats however it is hard to tell without further analysis.  
 
-**Question 1**
 
-The Weibull distribution is a popular distribution for looking at survival analysis, so is a natural first step for anaysing our data. First we find expressions for the Weibull Probability density and the Weibull Survival functions:
+
+#### Section 1.1: Maximum likelihood estimation of distribution parameters
+
+Our task here is to model the effect of a drug administered during a clinical trial. Specifically, we are interested in the time until tumour appearance in rats, where some of these rats had received a treatment of the drug. In essence, this is a survival analysis task, and in such cases the Weibull distribution is a common choice on which to base initial models.
+
+However, before attempting to produce any models it is always sensible to examine the data for any obvious patterns. We do not have space in this report to include a detailed exploratory analysis, but we can consider simple density plots of the uncensored observations, separated by whether or not treatment was received (see Figure \ref{fig:p1q1_density_plot}). Note that the distribution of the "treated" observations is possibly skewed slightly further to the left than the "untreated" distribution; but given the small sample size, this could just as easily be explained by natural variance in the data as it could by any potential effect of the treatment.
+
+```{r p1q1_density_plot, fig.height=3, out.extra="", fig.cap="Density plots for }
+library(ggplot2)
+ggplot(rats[rats$status == 0, ], aes(fill = factor(rx), x = time)) +
+  geom_density(alpha = 0.7) +
+  labs(x = "Time until tumour appearance", y = "Density", fill = "Treatment received") +
+  scale_fill_manual(labels = c("No", "Yes"), values = c("pink", "lightblue")) +
+  theme_bw() + theme(legend.position = c(0.15, 0.8), legend.background = element_rect(color = "black"))
+```
+
+We now assume that the times until tumour appearance, $T_i$, are distributed as
+$$T_i \sim \text{Weibull} \left( \text{shape} = 1/\sigma, \; \text{scale} = \exp(\eta_i) \right), \qquad \eta_i = \beta0 + \beta1 x_i$$
+where
+$$x_i = \begin{cases}
+1 & \text{rat } i \text{ received treatment} \\
+0 & \text{rat } i \text{ received placebo}
+\end{cases}$$
+
+Initially, we will attempt to determine the values of the parameters of this distribution via maximum likelihood estimation. To do so, we construct expressions for the negative log-likelihood and its gradient, making use of R's `deriv()` function to calculate the derivatives of the Weibull probability density function and survival function (the latter will be used for censored observations, i.e. observations where the rat died before tumour appearance).
+
 ```{r}
 weib_prob <- deriv(
   expression(
@@ -56,27 +83,35 @@ weib_surv <- deriv(
 Then calculate the negative log likelihood and its gradient, being sure to use the survival function for censored observations.
 
 ```{r}
-#negative log-likelihood
+# Negative log-likelihood
 weib_nll <- function(theta, t, treated, status) {
+  
   beta0 <- theta[1]
   beta1 <- theta[2]
   log_sigma <- theta[3]
+  
   -sum(
     status * weib_prob(t, beta0, beta1, log_sigma, treated),
     (1-status) * weib_surv(t, beta0, beta1, log_sigma, treated))
 }
+
+
 # Gradient of negative log-likelihood
 weib_nll_gr <- function(theta, t, treated, status) {
+  
   beta0 <- theta[1]
   beta1 <- theta[2]
   log_sigma <- theta[3]
+  
   -colSums(rbind(
     status * attr(weib_prob(t, beta0, beta1, log_sigma, treated), "gradient"),
     (1-status) * attr(weib_surv(t, beta0, beta1, log_sigma, treated), "gradient")
   ))
 }
 ```
+
 Now Use Optim to minimise the negative log-likelihood above to find the maximum likelihood estimate.
+
 ```{r}
 # Initial parameters
 theta0 <- c("beta0" = 2, "beta1" = 2, "log_sigma" = 2)
@@ -89,7 +124,8 @@ weib_opt <- optim(par = theta0,fn = weib_nll,gr = weib_nll_gr,t = rats$time,
 MLE paramater values are: Beta0 = `r (weib_opt$par[1])`, Beta1 = `r weib_opt$par[2]` and Sigma = `r exp(weib_opt$par[3])`
 
 
-**Question 2**  
+
+#### Section 1.2: 
 Use the inverse hessian calculated with optim to find the standard errors for each parametr and then use the asymptitic normal distribution to find a 95% confidence interval for $\beta_1$:
 
 ```{r}
@@ -114,7 +150,7 @@ mean_treated_confhigh<-unname(weib_mean(1/exp(weib_opt$par[3]),exp(weib_opt$par[
 
 We find that the expected mean time untill tumor appearnce in untreated rats is `r round(mean_untreated, digits = 1)` weeks and `r round(mean_treated_MLE,digits = 1)` (or between `r round(mean_treated_conflow,digits = 1)` and `r round(mean_treated_confhigh,digits = 1)` taking the confidence interval $\beta_1$ values) in treated rats. The difference of around 30 weeks strongly suggests that treated rats are devoloping tumours earlier than their untreated counterparts.
 
-**Question 3**  
+**Section 3**  
 
 We now repeat everything above but for a log-logistic distribution and its corresponding survival function. The log-logistic distribution is another popular option for survival analysis. First carry out the optimisation to find MLEs:
 
@@ -186,7 +222,7 @@ We now find that the expected mean time untill tumor appearnce in untreated rats
 TO ADD: QQplots of data vs weib and data vs llog and see what happens to decide which model best fits our data
 
 
-**Question 4**  
+**Section 4**  
 
 We now update the model to include the effect of rats being in different litters as random effects using a Weibull distribution. This accounts for any potential differences between litters, some litters may be predisposed to developing tumors earlier or later than others so adding in this random effect allows that to be accounted for. First we set up the model matricies:
 
@@ -315,7 +351,7 @@ conf_beta1_rand <- rand_opt$par[2] + c(-1, 1)*qnorm(0.975)*rand_std_err[2]
 
 Hence the 95% asymptotic confidence interval for the treatment effect $\beta_1$ with random effects accounted for is `r conf_beta1_rand`. As you can see the confidence interval is much smaller when random effects are taken into account which implies that there are random effects present. The smaller confidence interval gives further evidence that the treatment is causing tumours to appear earlier in treated rats, i.e. it is carcenogenic. Whereas in questions 2 and 3 the top end of the confidence interval was very close to zero now it is lower and hence we can be fairly sure that, based on the observed data, this treatment is carcenogenic to rats. 
 
-**Question 5**
+**Section 5**
 
 We now use the same model as above, with random effects. We use a Bayesian estimation procedure to estimate unknown parameter values. First find the log of the posterior distribution to be used for MCMC. We use improper uniform priors for $\beta_0$, $\beta_1$ and $log(\sigma)$, and an exponential prior with rate 5 for $\sigma_b$. 
 
