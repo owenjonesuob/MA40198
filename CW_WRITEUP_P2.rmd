@@ -204,17 +204,17 @@ set.seed(356476786) # Set a random seed for reproducibility
 ```
 
 
-### Section 2.1: Maximum likelihood estimation of parameters
+### Section 2.1: Maximum likelihood estimation of distribution parameters
 
 In this section we investigate fatigue in material samples subjected to cyclic loading. Conceptually, this problem is very similar to the problem investigated in Part 1: that is, the Weibull distribution is at the heart of much of the following analysis, and observations are treated as censored or uncensored based on whether or not the fatigue-testing run was completed.
 
 We have assumed that $N_i$, the number of test cycles completed at stress level $s_i$ and with fatigue constant $\gamma$ for the $i$th observation, is given by
 $$N_i = \alpha (s_i - \gamma)^\delta \epsilon_i$$
 where
-$$\epsilon_i \sim \text{Weibull} \left( \text{shape} = \frac{1}{\sigma}, \; \text{scale} = 1 \right)$$
+$$\epsilon_i \sim \text{Weibull} \left( \text{shape} = 1/\sigma, \; \text{scale} = 1 \right)$$
 
 Immediately we can incorporate the rest of the formula for $N_i$ into the scale parameter of this distribution, obtaining that
-$$N_i \sim \text{Weibull} \left( \text{shape} = \frac{1}{\sigma}, \; \text{scale} = \alpha (s_i - \gamma)^\delta \right)$$
+$$N_i \sim \text{Weibull} \left( \text{shape} = 1/\sigma, \; \text{scale} = \alpha (s_i - \gamma)^\delta \right)$$
 
 As in Part 1, we can now derive expressions for the negative log-likelihood and its gradient. Note that we reparameterise $\alpha$ and $\sigma$ using a log transform, since both of these parameters must always be greater than 0.
 
