@@ -405,7 +405,7 @@ re_beta1_ci <- re_opt$par["beta1"] +
 re_beta1_ci
 ```
 
-Compare this confidence interval with the one calculated in Section 1.2: the confidence interval is significantly tighter when random effects are taken into account. Therefore the inclusion of random effects in our model has improved our parameter estimates and shows increasing evidence that the use of this treatment is causing earlier tumor appearance in treated rats. Additionally we can infer that the litter does indeed have an effect on the time it takes for tumours to appear in rats.
+Compare this confidence interval with the one calculated in Section 1.2: the confidence interval is significantly tighter when random effects are taken into account. Therefore the inclusion of random effects in our model has improved our parameter estimates and shows increasing evidence that the use of this treatment is causing earlier tumour appearance in treated rats. Additionally we can infer that the litter does indeed have an effect on the time it takes for tumours to appear in rats.
 
 
 
@@ -679,9 +679,11 @@ Satisfied with our sampling, we conclude by calculating a 95% credible interval 
 quantile(adjusted$theta[-(1:burnin), "beta1"], c(0.025, 0.975))
 ```
 
-#### Carcinogenesis Study on Rats: Conclusion
 
-We have used mutliple determenistic models, included random effects and carried out a Bayesian estimation procedure to analyse whether there is any evidence that the drug in question is carcinogenic to rats. All our models point towards a lower $\beta_1$ value in treated rats, and based on our models this would imply that the use of this drug is causing earlier tumour appearance in treated rats and hence is carcinogenic.
+
+### Carcinogenesis Study on Rats: Conclusion
+
+We have used multiple deterministic models, included random effects and carried out a Bayesian estimation procedure to analyse whether there is any evidence that the drug in question is carcinogenic to rats. All our models point towards a lower $\beta_1$ value in treated rats, and based on our models this would imply that the use of this drug is causing earlier tumour appearance in treated rats and hence is carcinogenic.
 
 
 
@@ -790,7 +792,7 @@ round(data.frame(
 ), 3)
 ```
 
-The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these paramaters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
+The optimisation is of course dependent on our chosen value of the fatigue limit $\gamma$. By carrying out similar optimisations for different values of $\gamma$ across its potential range, we can see in Figure \ref{fig:p2q1_param_plots} that the parameter values change considerably. In particular, note the apparent negative correlation between `log_alpha` and `delta` (and the steadily tightening 95% confidence intervals for these parameters); and the rather more dramatic curve that `log_sigma` takes towards the upper end of the range of $\gamma$ (although the confidence interval seems to be of more or less constant width across the whole range).
 
 
 ```{r p2q1_param_plots, echo=FALSE, fig.dim=c(7, 2), out.extra="", fig.cap="Optimised parameters across the range of potential fatigue limits"}
@@ -1170,3 +1172,13 @@ $$\begin{aligned}
 \end{aligned}$$
 
 This final line is what is used in Section 2.4. In reality, when implemented the two calculations are not exactly the same due to floating point differences.
+
+
+
+### Fatigue of Materials: Conclusion
+
+Throughout this section we have found estimates for various parameters in a model which uses the Weibull distribution to predict the number of loading cycles, at a certain stress level, a coupon of a given material can endure before it eventually fails due to fatigue.
+
+Using this model, and our found parameters, we would be able to estimate how long a coupon of our material would be effective when used for a task where it was exposed to a certain level of stress. By investigating the fatigue limit we can estimate the exposed stress point where the coupon will be effectual in perpetuity. Once we include random effects we account for the fact that every coupon will have slightly different properties due to inconsistencies in the manufacturing process which leads to differing fatigue limits.
+
+We could find the mean fatigue limit or consider a lower quantile of the fatigue limits to predict how our coupons will perform against different stress levels. We could also easily look at the variance of our different fatigue limits which would allow us to predict the size of the effect that these inconsistencies in manufacturing have. For example, a particularly high variance would imply that the manufacturing process is very inconsistent and could be improved. This is beyond the scope of our report but certainly forms a strong basis for any subsequent work building on the methods and results presented here.
